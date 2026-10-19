@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { BrowserRouter, Route, Routes, useLocation } from 'react-router-dom'
-import { I18nProvider, useI18n } from './i18n'
+import { I18nProvider } from './i18n'
 import { AppProvider } from './state/app'
 import Header from './components/Header'
 import Footer from './components/Footer'
@@ -18,7 +18,6 @@ import AuthPage from './pages/Auth'
 import Admin from './pages/Admin'
 import Contact from './pages/Contact'
 import { About, Faq, NotFound, PolicyPage } from './pages/Static'
-import { isSupabaseConfigured } from './data/api'
 
 function ScrollTop() {
   const { pathname } = useLocation()
@@ -26,12 +25,6 @@ function ScrollTop() {
     window.scrollTo({ top: 0 })
   }, [pathname])
   return null
-}
-
-function DemoBar() {
-  const { t } = useI18n()
-  if (isSupabaseConfigured) return null
-  return <div className="demo-bar">{t('demo.banner')}</div>
 }
 
 function Shell() {
@@ -42,7 +35,6 @@ function Shell() {
         <img src={BG_RIGHT} alt="" loading="lazy" />
       </div>
       <ScrollTop />
-      <DemoBar />
       <Header />
       <Routes>
         <Route path="/" element={<Home />} />
