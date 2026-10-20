@@ -50,6 +50,11 @@ npm run check:i18n   # verify ar/en/tl dictionaries cover every t('...') key
 
 ### Going live with Supabase
 
+> **Fast path (clean project):** run `supabase/setup_all.sql` once in the SQL
+> Editor. It contains `0001` → `0002` → `0003` → seed data and refuses to run
+> if an incompatible `public.products` table already exists. Regenerate it with
+> `node scripts/make-setup-sql.mjs`, then continue at step 6.
+
 1. Create a Supabase project.
 2. Run `supabase/migrations/0001_shop_init.sql` in the SQL editor (tables, triggers,
    RLS, storage bucket). It is **idempotent** — safe to re-run.
