@@ -27,6 +27,8 @@ const { CATEGORIES, PRODUCTS, PROMOS, DEFAULT_SETTINGS } = mod.exports
 const sqlStr = (s) => `'${String(s).replace(/\\/g, '\\\\').replace(/'/g, "''")}'`
 /** SQL literal: strings inline, objects/arrays as compact JSON. */
 const lit = (v) => (typeof v === 'string' ? sqlStr(v) : sqlStr(JSON.stringify(v)))
+/** SQL literal for a Postgres text[] column (not JSON: '["a"]' is invalid array syntax). */
+const sqlArray = (v) => `array[${(Array.isArray(v) ? v : []).map(sqlStr).join(',')}]::text[]`
 /** Deterministic, valid UUID per stable key (md5-like but real uuid format). */
 const uuidOf = (key) => {
   const hex = createHash('sha256').update('hh-seed:' + key).digest('hex').slice(0, 32).replace(/^(.{12})/, '9$1')
@@ -59,7 +61,7 @@ for (const p of keep) {
     p.overview ? lit(p.overview) : 'null', p.ingredients ? lit(p.ingredients) : 'null', p.usage ? lit(p.usage) : 'null',
     lit(p.brand), p.manufacturer ? lit(p.manufacturer) : 'null', p.origin ? lit(p.origin) : 'null',
     Number(p.price).toFixed(2), p.comparePrice ? Number(p.comparePrice).toFixed(2) : 'null',
-    String(Math.max(0, p.stock)), lit(p.images), lit(p.badges),
+    String(Math.max(0, p.stock)), sqlArray(p.images), sqlArray(p.badges),
     String(!!p.regulated), lit(p.regStatus ?? 'off'), String(!!p.age18), 'true',
   ].join(', ')
   L.push(`insert into public.products (${cols})`)
