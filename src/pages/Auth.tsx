@@ -26,6 +26,7 @@ export default function AuthPage() {
   const [err, setErr] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [sent, setSent] = useState(false)
+  const [verifySent, setVerifySent] = useState(false)
 
   if (user && mode !== 'forgot') {
     return (
@@ -63,6 +64,13 @@ export default function AuthPage() {
           setErr(r.err === 'in_use' ? t('auth.errInUse') : r.err === 'weak' ? t('auth.errPass') : t('err.generic'))
           return
         }
+        // Supabase (with email confirmation ON) creates the account but no
+        // session — never pretend the customer is signed in.
+        if (r.verify) {
+          setVerifySent(true)
+          notify(t('auth.confirmEmail'))
+          return
+        }
         const r2 = await api.signIn({ email, password: pw })
         const u = r2.ok ? await api.getUser() : null
         setUser(u)
@@ -89,7 +97,8 @@ export default function AuthPage() {
           <h1>{isLogin ? t('auth.loginTitle') : isRegister ? t('auth.registerTitle') : t('auth.forgotTitle')}</h1>
           <p className="muted">{isLogin ? t('auth.loginSub') : isRegister ? t('auth.registerSub') : t('auth.forgotSub')}</p>
 
-          {sent && <p className="alert alert-success">{t('auth.sent')}</p>}
+          {sent && <p className="alert alert-success">{isSupabase() ? t('auth.sent') : t('auth.demoReset')}</p>}
+          {verifySent && <p className="alert alert-success">{t('auth.confirmEmail')}</p>}
           {err && <p className="alert alert-error">{err}</p>}
 
           <form onSubmit={submit} className="auth-form">
@@ -101,7 +110,7 @@ export default function AuthPage() {
             )}
             <div className="field">
               <label>{isRegister ? t('auth.email') : t('auth.identifier')}</label>
-              <input className="input" type={isRegister ? 'email' : 'text'} value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete={isRegister ? 'email' : 'username'} dir="ltr" placeholder={isLogin ? t('auth.identifierHint') : undefined} />
+              <input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete={isRegister ? 'email' : 'username'} dir="ltr" placeholder={isLogin ? t('auth.identifierHint') : undefined} />
             </div>
             {isRegister && (
               <div className="field">
@@ -134,7 +143,7 @@ export default function AuthPage() {
               <Link to="/login">{t('auth.haveAccount')}</Link>
             )}
           </div>
-          {!isSupabase() && <p className="demo-hint">{t('auth.demo')}</p>}
+          {!isSupabase() && !import.meta.env.PROD && <p className="demo-hint">{t('demo.banner')}</p>}
         </div>
       </div>
     </main>

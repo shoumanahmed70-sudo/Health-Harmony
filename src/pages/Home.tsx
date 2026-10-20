@@ -26,7 +26,8 @@ export default function Home() {
   const [ri, setRi] = useState(0)
 
   useEffect(() => {
-    void api.listAllReviews().then(setReviews).catch(() => setReviews([]))
+    // starter/demo reviews are never shown as customer testimonials
+    void api.listAllReviews().then((list) => setReviews(list.filter((r) => !r.seed))).catch(() => setReviews([]))
   }, [])
 
   const featured = useMemo(() => products.filter((p) => p.badges.includes('featured')).slice(0, 4), [products])

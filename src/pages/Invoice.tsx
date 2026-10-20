@@ -4,6 +4,7 @@ import { useI18n } from '../i18n'
 import { api } from '../data/api'
 import Logo from '../components/Logo'
 import { useApp } from '../state/app'
+import { bankIsPlaceholder } from '../data/util'
 import type { Order } from '../data/types'
 
 /** Printable invoice for a completed order: /invoice/:number (attach to customer delivery). */
@@ -121,7 +122,7 @@ export default function Invoice() {
           </section>
 
           <footer className="invoice-foot">
-            {order.paymentMethod === 'bank' && settings.payments && (
+            {order.paymentMethod === 'bank' && settings.payments && !bankIsPlaceholder(settings.payments) && (
               <p className="pay-iban" dir="ltr">{settings.payments.bankName} — IBAN: {settings.payments.bankIban}</p>
             )}
             <p>{t('invoice.thanks')}</p>

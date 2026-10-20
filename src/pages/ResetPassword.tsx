@@ -33,7 +33,7 @@ export default function ResetPassword() {
     const r = await api.changePassword(pw)
     setBusy(false)
     if (!r.ok) {
-      setErr(t('auth.errPass'))
+      setErr(t('err.generic'))
       return
     }
     setDone(true)

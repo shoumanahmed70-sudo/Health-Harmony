@@ -122,6 +122,7 @@ export default {
 
   shop: {
     title: 'All Products',
+    searchTitle: 'Search results',
     results: 'products',
     filters: 'Filters',
     category: 'Category',
@@ -167,8 +168,10 @@ export default {
     subtotal: 'Subtotal',
     discount: 'Discount',
     shipping: 'Shipping',
+    vat: 'VAT',
     free: 'Free',
     vatNote: 'Prices include VAT where applicable.',
+    vatExclNote: 'VAT is added to the total at the rate configured by the store.',
     checkoutBtn: 'Checkout',
     code: 'Promo code',
     apply: 'Apply',
@@ -210,6 +213,8 @@ export default {
     okTitle: 'Order received successfully 🎉',
     okText: 'We will contact you to confirm your order and delivery details. Thank you for trusting Health Harmony.',
     okTextDemo: 'Demo mode: this is a local demo order number. Orders are stored for real once the database is connected.',
+    orderNotFound: 'Order not found',
+    orderNotFoundSub: 'We could not find this order. Check the number and use the same browser/phone used at checkout.',
     orderNo: 'Order number',
     home: 'Back to Home',
     continue: 'Continue Shopping',
@@ -237,8 +242,8 @@ export default {
     registerTitle: 'Create your Health Harmony account',
     registerSub: 'Track orders, save addresses and get offers first.',
     email: 'Email',
-    identifier: 'Email or mobile number',
-    identifierHint: 'e.g. 05XXXXXXXX or name@mail.com',
+    identifier: 'Email',
+    identifierHint: 'name@mail.com',
     phone: 'Mobile number',
     password: 'Password',
     confirm: 'Confirm Password',
@@ -260,7 +265,8 @@ export default {
     errLogin: 'Incorrect email or password',
     errInUse: 'This email is already registered',
     okRegister: 'Account created — you can sign in now',
-    demo: 'Demo mode: demo@healthharmony.com / demo1234',
+    confirmEmail: 'Account created. Check your inbox to confirm your email, then sign in.',
+    demoReset: 'Demo mode: no email is sent. Password reset works after Supabase Auth is configured.',
   },
 
   account: {
@@ -308,6 +314,7 @@ export default {
   pages: {
     contactTitle: 'Contact Us',
     contactSub: 'Our team is ready to help — in Arabic, English or Filipino.',
+    contactUnset: 'Contact details will be published here soon. You can still send us a message using the form.',
     formTitle: 'Send Us a Message',
     formName: 'Your name',
     formEmail: 'Your email',
@@ -489,6 +496,9 @@ export default {
 
   setup: {
     title: 'Project setup incomplete',
-    sub: 'A production build requires Supabase keys in .env (VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY). For local development only, add VITE_ALLOW_DEMO=true to allow demo mode.',
+    sub: 'A production build requires Supabase keys in .env (VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY). Demo mode is available in local development only and is never used by a production build.',
+    dbTitle: 'Store database unavailable',
+    dbSub: 'The store could not reach its database, so products and orders are temporarily unavailable. Check the Supabase URL/keys, RLS migration and project status, then retry.',
+    retry: 'Try again',
   },
 } as Dictionary

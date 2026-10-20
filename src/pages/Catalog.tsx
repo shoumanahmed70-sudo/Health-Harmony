@@ -96,7 +96,7 @@ export default function Catalog() {
       : segment === 'beauty' ? t('page.beautyTitle')
       : segment === 'wellness' ? t('page.wellnessTitle')
       : segment === 'health' ? t('page.healthTitle')
-      : q ? `${t('page.offersTitle')} · ${q}` // search shows query context
+      : q ? `${t('shop.searchTitle')} · ${q}` // search shows query context
       : onSaleOnly || tag === 'sale' ? t('page.offersTitle')
       : t('shop.title')
 

@@ -122,6 +122,7 @@ export default {
 
   shop: {
     title: 'كل المنتجات',
+    searchTitle: 'نتائج البحث',
     results: 'منتج',
     filters: 'تصفية',
     category: 'الفئة',
@@ -167,8 +168,10 @@ export default {
     subtotal: 'المجموع الفرعي',
     discount: 'الخصم',
     shipping: 'الشحن',
+    vat: 'ضريبة القيمة المضافة',
     free: 'مجاني',
     vatNote: 'الأسعار تشمل ضريبة القيمة المضافة حيث تنطبق.',
+    vatExclNote: 'تُضاف ضريبة القيمة المضافة إلى الإجمالي حسب النسبة المعتمدة في المتجر.',
     checkoutBtn: 'إتمام الشراء',
     code: 'كود الخصم',
     apply: 'تطبيق',
@@ -210,6 +213,8 @@ export default {
     okTitle: 'تم استلام طلبك بنجاح 🎉',
     okText: 'سنتواصل معك لتأكيد الطلب وتفاصيل التوصيل. شكراً لثقتك بـ Health Harmony.',
     okTextDemo: 'وضع التجربة: هذا رقم طلب تجريبي محلي. عند ربط قاعدة البيانات تُحفظ الطلبات فعلياً.',
+    orderNotFound: 'الطلب غير موجود',
+    orderNotFoundSub: 'لم نجد هذا الطلب. تحقق من الرقم واستخدم نفس المتصفح/الجوال المستخدم عند إتمام الطلب.',
     orderNo: 'رقم الطلب',
     home: 'العودة للرئيسية',
     continue: 'متابعة التسوق',
@@ -237,8 +242,8 @@ export default {
     registerTitle: 'أنشئ حسابك في Health Harmony',
     registerSub: 'تتبع الطلبات، حفظ العناوين، والحصول على العروض أولاً.',
     email: 'البريد الإلكتروني',
-    identifier: 'البريد الإلكتروني أو رقم الجوال',
-    identifierHint: 'مثال: 05XXXXXXXX أو name@mail.com',
+    identifier: 'البريد الإلكتروني',
+    identifierHint: 'name@mail.com',
     phone: 'رقم الجوال',
     password: 'كلمة المرور',
     confirm: 'تأكيد كلمة المرور',
@@ -260,7 +265,8 @@ export default {
     errLogin: 'البريد الإلكتروني أو كلمة المرور غير صحيحة',
     errInUse: 'هذا البريد مسجل مسبقاً',
     okRegister: 'تم إنشاء الحساب — يمكنك تسجيل الدخول الآن',
-    demo: 'وضع التجربة: demo@healthharmony.com / demo1234',
+    confirmEmail: 'تم إنشاء الحساب. تحقق من بريدك لتأكيد الحساب ثم سجّل الدخول.',
+    demoReset: 'وضع التجربة: لا يُرسل بريد فعلي. تعمل استعادة كلمة المرور بعد إعداد Supabase Auth.',
   },
 
   account: {
@@ -308,6 +314,7 @@ export default {
   pages: {
     contactTitle: 'اتصل بنا',
     contactSub: 'فريقنا جاهز لمساعدتك — بالعربية أو الإنجليزية أو الفلبينية.',
+    contactUnset: 'ستُنشر بيانات التواصل هنا قريباً. يمكنك مراسلتنا عبر النموذج في الوقت الحالي.',
     formTitle: 'أرسل لنا رسالة',
     formName: 'اسمك',
     formEmail: 'بريدك الإلكتروني',
@@ -489,6 +496,9 @@ export default {
 
   setup: {
     title: 'إعداد المشروع غير مكتمل',
-    sub: 'البناء الإنتاجي يتطلب مفاتيح Supabase في ملف .env (VITE_SUPABASE_URL و VITE_SUPABASE_ANON_KEY). إن كنت تطوّر محليًا فقط فأضف VITE_ALLOW_DEMO=true للسماح بوضع التجربة.',
+    sub: 'البناء الإنتاجي يتطلب مفاتيح Supabase في ملف .env (VITE_SUPABASE_URL و VITE_SUPABASE_ANON_KEY). وضع التجربة متاح للتطوير المحلي فقط ولا يُستخدم في نسخة الإنتاج إطلاقاً.',
+    dbTitle: 'قاعدة بيانات المتجر غير متاحة',
+    dbSub: 'تعذر الوصول إلى قاعدة البيانات، لذا المنتجات والطلبات غير متاحة مؤقتاً. تحقق من رابط/مفاتيح Supabase وحالة المشروع وترحيل RLS ثم أعد المحاولة.',
+    retry: 'إعادة المحاولة',
   },
 } as Dictionary

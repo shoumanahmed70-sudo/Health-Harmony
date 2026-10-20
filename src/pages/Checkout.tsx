@@ -4,7 +4,7 @@ import { useI18n } from '../i18n'
 import { useApp } from '../state/app'
 import { api } from '../data/api'
 import { PageHead, productTitle } from '../components/ui'
-import { productTitle as pt } from '../data/util'
+import { productTitle as pt, bankIsPlaceholder } from '../data/util'
 import type { Product } from '../data/types'
 
 type Errors = Partial<Record<'name' | 'email' | 'phone' | 'city' | 'street' | 'agree', string>>
@@ -13,13 +13,12 @@ export default function Checkout() {
   const { t, locale, money } = useI18n()
   const { cart, products, settings, user, clearCart, notify } = useApp()
   const s = settings.payments ?? { cod: false, bank: false, bankName: '', bankIban: '', bankNote: '' }
-  // seed placeholders ("SA00…"/مثال/example) mean the admin has not set real bank
-  // details yet — bank transfer stays hidden from customers until they do
-  const bankIsPlaceholder =
-    !s.bankIban.trim() || /SA00/i.test(s.bankIban) || /مثال|example/i.test(s.bankName)
+  // seeded placeholder bank details ("SA00…"/مثال/example) keep bank transfer
+  // hidden from customers until the admin saves real values
+  const bankIsExample = bankIsPlaceholder(s)
   const pay = {
     cod: Boolean(s.cod),
-    bank: Boolean(s.bank) && !bankIsPlaceholder,
+    bank: Boolean(s.bank) && !bankIsExample,
     bankName: s.bankName,
     bankIban: s.bankIban,
     bankNote: s.bankNote || t('checkout.bankNote'),
@@ -29,7 +28,10 @@ export default function Checkout() {
   const loc = useLocation() as { state?: { promo?: string | null } }
 
   const l = locale as 'ar' | 'en' | 'tl'
-  const [promoCode] = useState(loc.state?.promo ?? '')
+  const [promoCode] = useState(() => {
+    if (loc.state?.promo) return loc.state.promo
+    try { return window.sessionStorage.getItem('hh_promo') ?? '' } catch { return '' }
+  })
 
   const [f, setF] = useState({
     name: user?.name ?? '',
@@ -62,7 +64,7 @@ export default function Checkout() {
   const [disc, setDisc] = useState(0)
   useEffect(() => {
     let alive = true
-    const code = loc.state?.promo as string | undefined
+    const code = promoCode
     if (!code) {
       setDisc(0)
       return
@@ -77,11 +79,15 @@ export default function Checkout() {
     return () => {
       alive = false
     }
-  }, [loc.state, subtotal])
+  }, [promoCode, subtotal])
   const discount = disc
   const shipBase = f.shippingMethod === 'express' ? settings.shipExpress : settings.shipStandard
   const shipping = subtotal - discount >= settings.freeOver ? 0 : shipBase
-  const total = Math.max(0, subtotal - discount + shipping)
+  // same rule as orders-create: VAT-inclusive prices add nothing; exclusive adds tax
+  const tax = settings.vatInclusive === false && settings.vat > 0
+    ? Math.round(((subtotal - discount) * settings.vat) / 100 * 100) / 100
+    : 0
+  const total = Math.max(0, subtotal - discount + shipping + tax)
 
   void productTitle
 
@@ -138,6 +144,7 @@ export default function Checkout() {
       return
     }
     clearCart()
+    try { window.sessionStorage.removeItem('hh_promo') } catch { /* ignore */ }
     notify(t('checkout.okTitle'))
     nav(`/order/${res.number}`, { replace: true })
   }
@@ -285,9 +292,12 @@ export default function Checkout() {
               <div><dt>{t('cart.discount')}</dt><dd>− {money(discount)}</dd></div>
             )}
             <div><dt>{t('cart.shipping')}</dt><dd>{shipping === 0 ? t('cart.free') : money(shipping)}</dd></div>
+            {tax > 0 && (
+              <div><dt>{t('cart.vat')} ({settings.vat}%)</dt><dd>{money(tax)}</dd></div>
+            )}
             <div className="grand"><dt>{t('cart.total')}</dt><dd>{money(total)}</dd></div>
           </dl>
-          <p className="muted small">{t('cart.vatNote')}</p>
+          <p className="muted small">{settings.vatInclusive === false ? t('cart.vatExclNote') : t('cart.vatNote')}</p>
         </aside>
       </div>
     </main>

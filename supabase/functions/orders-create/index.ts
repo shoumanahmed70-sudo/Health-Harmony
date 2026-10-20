@@ -1,9 +1,9 @@
 // Supabase Edge Function: orders-create
 // Recomputes all prices/totals SERVER-SIDE from the database before creating the
 // order. The client never sends prices; the service-role key lives only here.
-// Deploy: supabase functions deploy orders-create --no-verify-jwt=false
-// (JWT verification ON: callers must be signed in, or check out as a guest —
-// guest orders are COD only. Age-restricted items require a signed-in user.)
+// Deploy: supabase functions deploy orders-create
+// (JWT verification stays ON: the anon key is a valid JWT for guests, while
+// age-restricted items additionally require a signed-in user.)
 //
 // Error shape: { error: string, code: string } — the client maps `code`
 // (MISSING_FIELDS | INVALID_PHONE | INVALID_INPUT | UNKNOWN_PRODUCT | UNAVAILABLE |
@@ -28,6 +28,7 @@ interface IncomingBody {
 const cors = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
 const json = (body: unknown, status = 200) =>
@@ -66,8 +67,14 @@ Deno.serve(async (req) => {
   const items = Array.isArray(body.items) ? body.items : []
   const contact = body.contact ?? ({} as IncomingBody['contact'])
   const address = body.address ?? ({} as IncomingBody['address'])
-  if (!items.length || !contact.name || !contact.phone || !address.city || !address.street) {
+  if (!items.length || !contact.name || !contact.phone || !contact.email || !address.city || !address.street) {
     return json({ error: 'missing contact/address', code: 'MISSING_FIELDS' }, 400)
+  }
+  if (String(contact.name).trim().length < 2 || String(address.city).trim().length < 2 || String(address.street).trim().length < 2) {
+    return json({ error: 'invalid contact/address', code: 'INVALID_INPUT' }, 400)
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(contact.email).trim())) {
+    return json({ error: 'invalid email', code: 'INVALID_INPUT' }, 400)
   }
   if (!/^(\+9665\d{8}|05\d{8})$/.test(String(contact.phone ?? '').replace(/[\s-]/g, ''))) {
     return json({ error: 'invalid phone', code: 'INVALID_PHONE' }, 400)
@@ -75,23 +82,54 @@ Deno.serve(async (req) => {
   if (!['standard', 'express'].includes(body.shipping_method)) {
     return json({ error: 'invalid shipping method', code: 'INVALID_INPUT' }, 400)
   }
+  if (body.payment_method !== undefined && !['cod', 'bank'].includes(body.payment_method)) {
+    return json({ error: 'invalid payment method', code: 'INVALID_INPUT' }, 400)
+  }
   const paymentMethod = body.payment_method === 'bank' ? 'bank' : 'cod'
+  if (items.length > 50) return json({ error: 'too many lines', code: 'INVALID_INPUT' }, 400)
 
-  // 0) Payment method must be enabled in storefront settings
+  // Merge duplicate slugs so one order line can never bypass the stock check
+  // by splitting the same product across multiple entries.
+  const merged = new Map<string, number>()
+  for (const line of items) {
+    const slug = String(line?.slug ?? '').trim()
+    const qty = Math.floor(Number(line?.qty))
+    if (!slug || !Number.isFinite(qty) || qty <= 0) {
+      return json({ error: 'invalid item', code: 'INVALID_INPUT' }, 400)
+    }
+    merged.set(slug, (merged.get(slug) ?? 0) + qty)
+  }
+  const mergedItems = [...merged.entries()].map(([slug, qty]) => ({ slug, qty }))
+  if (mergedItems.some((i) => i.qty > 99)) {
+    return json({ error: 'quantity too large', code: 'INVALID_INPUT' }, 400)
+  }
+
+  // 0) Payment method must be enabled in storefront settings; bank transfer also
+  //    requires real IBAN details (seeded placeholders are never operational).
   {
     const { data: settingsRow } = await admin
       .from('site_settings')
       .select('value')
       .eq('key', 'storefront')
       .maybeSingle()
-    const payments = (settingsRow?.value as { payments?: { cod?: boolean; bank?: boolean } } | null)?.payments
+    const value = (settingsRow?.value ?? {}) as {
+      payments?: { cod?: boolean; bank?: boolean; bankName?: string; bankIban?: string }
+    }
+    const payments = value.payments
     if (payments && payments[paymentMethod] === false) {
       return json({ error: 'payment method disabled', code: 'PAYMENT_DISABLED' }, 400)
+    }
+    if (paymentMethod === 'bank') {
+      const iban = String(payments?.bankIban ?? '').replace(/\s+/g, '').toUpperCase()
+      const placeholder = !iban || /^SA0+$/.test(iban) || /مثال|example/i.test(String(payments?.bankName ?? ''))
+      if (placeholder || payments?.bank === false) {
+        return json({ error: 'bank transfer not configured', code: 'PAYMENT_DISABLED' }, 400)
+      }
     }
   }
 
   // 1) Load storefront-visible products and verify each line against the DB
-  const slugs = items.map((i) => String(i.slug))
+  const slugs = mergedItems.map((i) => i.slug)
   const { data: products, error: perr } = await admin
     .from('products')
     .select('slug,label,price,images,stock,regulated,reg_status,age_18,active')
@@ -109,7 +147,7 @@ Deno.serve(async (req) => {
     image: string | null
   }[] = []
 
-  for (const line of items) {
+  for (const line of mergedItems) {
     const p = map.get(line.slug)
     const qty = Math.floor(Number(line.qty))
     if (!p || qty <= 0) return json({ error: `unknown product: ${line.slug}`, code: 'UNKNOWN_PRODUCT' }, 400)
@@ -137,8 +175,9 @@ Deno.serve(async (req) => {
 
   // 2) Promo (server-validated; promos table is not publicly readable by design)
   let discount = 0
-  if (body.promo_code) {
-    const code = String(body.promo_code).trim().toUpperCase()
+  const promoCode = body.promo_code ? String(body.promo_code).trim().toUpperCase().slice(0, 40) : ''
+  if (promoCode) {
+    const code = promoCode
     const { data: promo } = await admin
       .from('promos')
       .select('kind,value,active')
@@ -147,7 +186,7 @@ Deno.serve(async (req) => {
     if (promo?.active) {
       discount =
         promo.kind === 'percent'
-          ? Math.round(((subtotal * Number(promo.value)) / 100) * 100) / 100
+          ? Math.min(subtotal, Math.round(((subtotal * Number(promo.value)) / 100) * 100) / 100)
           : Math.min(Number(promo.value), subtotal)
     }
   }
@@ -186,9 +225,13 @@ Deno.serve(async (req) => {
     if (serr || okStock === false) {
       // roll back the lines already reserved so we never leak stock on failure
       for (const d of decremented) {
-        await admin.rpc('restore_stock', { p_slug: d.slug, p_qty: d.qty }).catch(() => {})
+        const { error: rerr } = await admin.rpc('restore_stock', { p_slug: d.slug, p_qty: d.qty })
+        if (rerr) console.error('[orders-create] stock rollback failed for', d.slug, rerr)
       }
-      if (serr) console.error('[orders-create] stock decrement failed for', i.slug, serr)
+      if (serr) {
+        console.error('[orders-create] stock decrement failed for', i.slug, serr)
+        return json({ error: 'stock check unavailable', code: 'DB_ERROR' }, 502)
+      }
       return json(
         { error: `insufficient stock: ${i.slug}`, code: 'OUT_OF_STOCK' },
         409,
@@ -209,8 +252,18 @@ Deno.serve(async (req) => {
       .insert({
         number,
         user_id: userId,
-        contact,
-        address,
+        contact: {
+          name: String(contact.name).trim().slice(0, 120),
+          email: String(contact.email).trim().toLowerCase().slice(0, 200),
+          phone: String(contact.phone).trim().slice(0, 20),
+        },
+        address: {
+          city: String(address.city).trim().slice(0, 120),
+          district: String(address.district ?? '').trim().slice(0, 120),
+          street: String(address.street).trim().slice(0, 240),
+          building: String(address.building ?? '').trim().slice(0, 120) || undefined,
+          notes: String(address.notes ?? '').trim().slice(0, 500) || undefined,
+        },
         items: orderItems,
         subtotal,
         shipping,
@@ -233,9 +286,11 @@ Deno.serve(async (req) => {
   if (!order) {
     // give the reserved stock back — the order was never created
     for (const d of decremented) {
-      await admin.rpc('restore_stock', { p_slug: d.slug, p_qty: d.qty }).catch(() => {})
+      const { error: rerr } = await admin.rpc('restore_stock', { p_slug: d.slug, p_qty: d.qty })
+      if (rerr) console.error('[orders-create] rollback failed for', d.slug, rerr)
     }
-    return json({ error: 'order insert failed', detail: oerr?.message, code: 'DB_ERROR' }, 502)
+    console.error('[orders-create] order insert failed', oerr)
+    return json({ error: 'order insert failed', code: 'DB_ERROR' }, 502)
   }
 
   // 6) Return the RAW database row — the client maps it with mapOrderFromRow.

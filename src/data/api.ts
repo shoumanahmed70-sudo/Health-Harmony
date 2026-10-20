@@ -24,12 +24,11 @@ const anon = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
 export const isSupabaseConfigured = Boolean(url && anon)
 
 /**
- * A production build without Supabase credentials would silently show real
- * customers an empty localStorage demo store. Block that unless the developer
- * opts in explicitly with VITE_ALLOW_DEMO=true.
+ * Demo mode is a development-only preview. A production build without Supabase
+ * credentials must never serve localStorage data or accept demo orders, so the
+ * app shows a setup screen instead. There is deliberately no production opt-in.
  */
-export const PROD_DEMO_BLOCKED =
-  import.meta.env.PROD && !isSupabaseConfigured && import.meta.env.VITE_ALLOW_DEMO !== 'true'
+export const PROD_DEMO_BLOCKED = import.meta.env.PROD && !isSupabaseConfigured
 
 let _sb: SupabaseClient | null = null
 export function sb(): SupabaseClient {
@@ -107,10 +106,14 @@ function freshDB(): DemoDB {
     reviews: clone(REVIEWS),
     promos: clone(PROMOS),
     settings: clone(DEFAULT_SETTINGS),
-    users: [
-      { id: 'u_demo', email: 'demo@healthharmony.com', name: 'Demo Customer', phone: '0551234567', role: 'customer', createdAt: new Date().toISOString(), pw: 'demo1234' },
-      { id: 'u_admin', email: 'admin@healthharmony.com', name: 'Store Admin', phone: '0550000000', role: 'admin', createdAt: new Date().toISOString(), pw: 'admin1234' },
-    ],
+    // Demo accounts exist only in a development bundle. A production build
+    // never uses the demo backend and must not ship these credentials at all.
+    users: import.meta.env.DEV
+      ? [
+          { id: 'u_demo', email: 'demo@healthharmony.com', name: 'Demo Customer', phone: '0551234567', role: 'customer', createdAt: new Date().toISOString(), pw: 'demo1234' },
+          { id: 'u_admin', email: 'admin@healthharmony.com', name: 'Store Admin', phone: '0550000000', role: 'admin', createdAt: new Date().toISOString(), pw: 'admin1234' },
+        ]
+      : [],
     addresses: [],
     orders: [],
     submissions: [],
@@ -123,6 +126,9 @@ let _db: DemoDB | null = null
 function db(): DemoDB {
   if (_db) return _db
   try {
+    // remove the pre-v2 demo database: it is never read again and may hold
+    // outdated fake orders/prices/accounts in a developer's browser
+    window.localStorage.removeItem('hh_demo_db_v1')
     const raw = window.localStorage.getItem(DB_KEY)
     if (raw) {
       _db = JSON.parse(raw) as DemoDB
@@ -210,10 +216,28 @@ export type ListOpts = {
   publicOnly?: boolean
 }
 
-export type AuthResult = { ok: true } | { ok: false; err: 'bad' | 'in_use' | 'weak' | 'mail' | 'generic' }
+export type AuthResult =
+  | { ok: true; verify?: boolean }
+  | { ok: false; err: 'bad' | 'in_use' | 'weak' | 'mail' | 'generic' }
 export type EmailResult = { ok: true } | { ok: false; err: 'mail' | 'generic' }
 
 export const api = {
+  /* ---------- connectivity ---------- */
+
+  /** Lightweight Supabase reachability check. Returns an error message or null. */
+  async health(): Promise<string | null> {
+    if (!isSupabaseConfigured) return null
+    try {
+      const [products, categories] = await Promise.all([
+        sb().from('products').select('slug', { count: 'exact', head: true }).eq('active', true).limit(1),
+        sb().from('categories').select('slug', { count: 'exact', head: true }).eq('active', true).limit(1),
+      ])
+      return products.error?.message ?? categories.error?.message ?? null
+    } catch (e) {
+      return e instanceof Error ? e.message : 'network error'
+    }
+  },
+
   /* ---------- catalog ---------- */
 
   async listCategories(): Promise<Category[]> {
@@ -382,15 +406,10 @@ export const api = {
 
   async signIn({ email, password }: { email: string; password: string }): Promise<AuthResult> {
     if (isSupabaseConfigured) {
-      let login = email.trim().toLowerCase()
-      const id = login.replace(/[\s-]/g, '')
-      // Saudi mobile sign-in: resolve phone → the email bound to its profile
-      if (/^(\+9665\d{8}|05\d{8})$/.test(id)) {
-        const phoneArg = id.startsWith('0') ? '+966' + id.slice(1) : id
-        const { data: em } = await sb().rpc('find_email_by_phone', { p_phone: phoneArg })
-        if (!em) return { ok: false, err: 'bad' }
-        login = String(em)
-      }
+      // Email-only sign-in. The old phone→email RPC let anonymous callers
+      // enumerate registered customers' email addresses, so it is no longer
+      // called from the browser.
+      const login = email.trim().toLowerCase()
       const { error } = await sb().auth.signInWithPassword({ email: login, password })
       if (error) {
         return error.message.includes('Invalid login') ? { ok: false, err: 'bad' } : { ok: false, err: 'generic' }
@@ -415,7 +434,7 @@ export const api = {
 
   async signUp({ name, email, password, phone }: { name: string; email: string; password: string; phone?: string }): Promise<AuthResult> {
     if (isSupabaseConfigured) {
-      const { error } = await sb().auth.signUp({
+      const { data, error } = await sb().auth.signUp({
         email: email.trim().toLowerCase(),
         password,
         options: { data: { full_name: name, phone: phone?.replace(/[\s-]/g, '') ?? '' } },
@@ -426,7 +445,9 @@ export const api = {
         if (error.message.includes('email')) return { ok: false, err: 'mail' }
         return { ok: false, err: 'generic' }
       }
-      return { ok: true }
+      // When "Confirm email" is enabled Supabase returns no session; the UI must
+      // ask the customer to verify instead of pretending they are signed in.
+      return { ok: true, verify: !data.session }
     }
     const em = email.trim().toLowerCase()
     if (db().users.some((u) => u.email === em)) return { ok: false, err: 'in_use' }
@@ -658,6 +679,25 @@ export const api = {
       }
     }
 
+    // Demo orders are a local-development preview only. This is a second guard
+    // behind PROD_DEMO_BLOCKED: a production bundle must never claim an order
+    // was created when no server confirmed it.
+    if (import.meta.env.PROD) return { err: 'demo_blocked' }
+
+    // Demo parity with the server: reject disabled payments and insufficient
+    // stock instead of silently clamping stock to zero.
+    const demoPayments = (await api.getSettings()).payments
+    if (demoPayments && demoPayments[draft.paymentMethod] === false) return { err: 'PAYMENT_DISABLED' }
+    if (draft.paymentMethod === 'bank') {
+      const iban = (demoPayments?.bankIban ?? '').replace(/\s+/g, '').toUpperCase()
+      const placeholder = !iban || /^SA0+$/.test(iban) || /مثال|example/i.test(demoPayments?.bankName ?? '')
+      if (placeholder) return { err: 'PAYMENT_DISABLED' }
+    }
+    for (const it of items) {
+      const p = db().products.find((x) => x.slug === it.slug)
+      if (!p || p.active === false || p.stock < it.qty) return { err: 'OUT_OF_STOCK' }
+    }
+
     db().orders.unshift(order)
     // decrement demo stock
     for (const it of items) {
@@ -746,14 +786,10 @@ export const api = {
 
     async updateOrderStatus(id: string, status: OrderStatus): Promise<EmailResult> {
       if (isSupabaseConfigured) {
-        const { data: before } = await sb().from('orders').select('status').eq('id', id).maybeSingle()
-        const { error } = await sb().from('orders').update({ status }).eq('id', id)
-        if (error) return { ok: false, err: 'generic' }
-        // cancelling a previously-counted order returns its items to stock
-        if (status === 'cancelled' && before?.status && before.status !== 'cancelled') {
-          await sb().rpc('restock_order', { p_order: id })
-        }
-        return { ok: true }
+        // Atomic, idempotent transition in PostgreSQL: the status change and
+        // stock restock happen in one transaction, exactly once.
+        const { error } = await sb().rpc('set_order_status', { p_order: id, p_status: status })
+        return error ? { ok: false, err: 'generic' } : { ok: true }
       }
       const o = db().orders.find((x) => x.id === id)
       if (o) {
@@ -800,6 +836,12 @@ export const api = {
 
     async saveProduct(p: Product): Promise<EmailResult> {
       if (isSupabaseConfigured) {
+        // Reviews reference products by slug (FK without ON UPDATE CASCADE);
+        // renaming an existing slug in place would fail. Keep it immutable.
+        if (isUuid(p.id)) {
+          const { data: cur } = await sb().from('products').select('slug').eq('id', p.id).maybeSingle()
+          if (cur && (cur as { slug: string }).slug !== p.slug) return { ok: false, err: 'generic' }
+        }
         const row = mapProductToRow(p)
         if (!isUuid(p.id)) {
           // demo-style/pending id: match on slug — update if the row already exists, insert otherwise
@@ -836,16 +878,22 @@ export const api = {
 
     async saveCategory(c: Category): Promise<EmailResult> {
       if (isSupabaseConfigured) {
+        // Category slugs are referenced by products (FK); renaming them in place
+        // would break the catalog. The admin form locks the slug for existing rows.
+        if (isUuid(c.id)) {
+          const { data: cur } = await sb().from('categories').select('slug').eq('id', c.id).maybeSingle()
+          if (cur && (cur as { slug: string }).slug !== c.slug) return { ok: false, err: 'generic' }
+        }
         const row = { id: c.id, slug: c.slug, experience: c.experience, label: c.label, desc: c.desc, sort: c.sort, active: c.active }
         if (!isUuid(c.id)) {
           // demo-style id: match on slug, then update-or-insert without forcing a bad uuid
+          delete (row as Record<string, unknown>).id
           const { data: existing } = await sb().from('categories').select('id').eq('slug', c.slug).maybeSingle()
           const targetId = (existing as { id: string } | null)?.id
           if (targetId) {
             const { error } = await sb().from('categories').update(row).eq('id', targetId)
             return error ? { ok: false, err: 'generic' } : { ok: true }
           }
-          delete (row as Record<string, unknown>).id
         }
         const { error } = await sb().from('categories').upsert(row, { onConflict: 'id' })
         return error ? { ok: false, err: 'generic' } : { ok: true }
@@ -887,11 +935,25 @@ export const api = {
 
     async savePromos(list: Promo[]): Promise<EmailResult> {
       if (isSupabaseConfigured) {
-        const { error } = await sb().from('promos').upsert(list)
-        if (error) return { ok: false, err: 'generic' }
+        const normalized = list.map((p) => ({
+          code: p.code.trim().toUpperCase(),
+          kind: p.kind,
+          value: Number(p.value),
+          active: p.active !== false,
+        }))
+        if (normalized.some((p) => !p.code || !Number.isFinite(p.value) || p.value <= 0 || (p.kind === 'percent' && p.value > 100))) {
+          return { ok: false, err: 'generic' }
+        }
+        if (new Set(normalized.map((p) => p.code)).size !== normalized.length) {
+          return { ok: false, err: 'generic' }
+        }
+        if (normalized.length) {
+          const { error } = await sb().from('promos').upsert(normalized)
+          if (error) return { ok: false, err: 'generic' }
+        }
         // deletions + code renames: remove any code the admin dropped from the list
         const { data: existing } = await sb().from('promos').select('code')
-        const keepCodes = new Set(list.map((p) => p.code.trim().toUpperCase()))
+        const keepCodes = new Set(normalized.map((p) => p.code))
         const stale = (existing ?? [])
           .map((r: Record<string, unknown>) => String(r.code))
           .filter((c: string) => !keepCodes.has(c))

@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { BrowserRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { I18nProvider, useI18n } from './i18n'
-import { AppProvider } from './state/app'
+import { AppProvider, useApp } from './state/app'
 import { PROD_DEMO_BLOCKED } from './data/api'
 import Header from './components/Header'
 import Footer from './components/Footer'
@@ -44,9 +44,32 @@ function SetupError() {
   )
 }
 
+/** Supabase is configured but unreachable/misconfigured: no catalog, no orders. */
+function DbError({ detail, retry }: { detail: string; retry: () => void }) {
+  const { t } = useI18n()
+  return (
+    <main className="page">
+      <div className="wrap empty-pane">
+        <div className="empty-emoji">⚠️</div>
+        <div className="empty-title">{t('setup.dbTitle')}</div>
+        <div className="empty-sub">{t('setup.dbSub')}</div>
+        <p className="muted small" dir="ltr" style={{ wordBreak: 'break-word' }}>{detail}</p>
+        <button className="btn btn-primary" onClick={retry}>{t('setup.retry')}</button>
+      </div>
+    </main>
+  )
+}
+
 function Shell() {
+  const { catalogError, reloadCatalog, loading } = useApp()
   if (PROD_DEMO_BLOCKED) {
     return <SetupError />
+  }
+  if (catalogError) {
+    return <DbError detail={catalogError} retry={() => void reloadCatalog()} />
+  }
+  if (loading) {
+    return <div className="loading-block"><div className="spinner" /></div>
   }
   return (
     <>

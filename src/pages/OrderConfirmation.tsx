@@ -61,12 +61,12 @@ export default function OrderConfirmation() {
       <div className="wrap confirm-wrap">
         <div className="confirm card">
           <div className="confirm-ico">🧾</div>
-          <h1>{t('checkout.okTitle')}</h1>
-          <p className="muted">{t('shop.noResults')}</p>
+          <h1>{t('checkout.orderNotFound')}</h1>
+          <p className="muted">{t('checkout.orderNotFoundSub')}</p>
           <div className="confirm-cta">
             <Link to="/shop" className="btn btn-primary">{t('checkout.continue')}</Link>
+            <Link to="/login" className="btn btn-outline">{t('auth.login')}</Link>
           </div>
-          <p className="muted small">{t('checkout.okTextDemo')}</p>
         </div>
       </div>
     </main>

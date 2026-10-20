@@ -56,6 +56,7 @@ type AppState = {
   categories: Category[]
   settings: Settings
   loading: boolean
+  catalogError: string | null
   reloadCatalog: () => Promise<void>
   productBySlug: (slug: string) => Product | undefined
 
@@ -92,6 +93,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [categories, setCategories] = useState<Category[]>([])
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS)
   const [loading, setLoading] = useState(true)
+  const [catalogError, setCatalogError] = useState<string | null>(null)
 
   const [user, setUser] = useState<UserProfile | null>(null)
   const [authReady, setAuthReady] = useState(false)
@@ -108,6 +110,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const reloadCatalog = useCallback(async () => {
+    setLoading(true)
+    // In Supabase mode a failed connection must be surfaced clearly; never fall
+    // back to demo/local data or silently show an empty catalog.
+    const healthError = await api.health()
+    if (healthError) {
+      setCatalogError(healthError)
+      setLoading(false)
+      return
+    }
+    setCatalogError(null)
     const [ps, cs, st] = await Promise.all([api.listProducts({ publicOnly: true }), api.listCategories(), api.getSettings()])
     try {
       setProducts(ps)
@@ -191,6 +203,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     categories,
     settings,
     loading,
+    catalogError,
     reloadCatalog,
     productBySlug,
     user,

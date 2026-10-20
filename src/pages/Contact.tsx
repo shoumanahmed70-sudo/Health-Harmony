@@ -4,10 +4,12 @@ import { useApp } from '../state/app'
 import { api } from '../data/api'
 import { PageHead } from '../components/ui'
 import { Mail, Phone, Pin, Clock } from '../components/Icons'
+import { isPlaceholderPhone, isPlaceholderEmail, isPlaceholderAddress, hasRealContact } from '../data/util'
 
 export default function Contact() {
   const { t } = useI18n()
-  const { notify } = useApp()
+  const { notify, settings } = useApp()
+  const c = settings.contacts
   const [f, setF] = useState({ name: '', email: '', message: '' })
   const [err, setErr] = useState<string | null>(null)
   const [sent, setSent] = useState(false)
@@ -32,10 +34,21 @@ export default function Contact() {
         <div>
           <PageHead title={t('pages.contactTitle')} sub={t('pages.contactSub')} />
           <ul className="contact-cards">
-            <li className="card"><Phone className="ci" /><div><b>{t('checkout.phone')}</b><span dir="ltr">{t('footer.phoneV')}</span></div></li>
-            <li className="card"><Mail className="ci" /><div><b>{t('checkout.email')}</b><span dir="ltr">{t('footer.emailV')}</span></div></li>
-            <li className="card"><Pin className="ci" /><div><b>{t('footer.address')}</b></div></li>
-            <li className="card"><Clock className="ci" /><div><b>{t('footer.hours')}</b></div></li>
+            {!isPlaceholderPhone(c.phone) && (
+              <li className="card"><Phone className="ci" /><div><b>{t('checkout.phone')}</b><span dir="ltr">{c.phone}</span></div></li>
+            )}
+            {!isPlaceholderEmail(c.email) && (
+              <li className="card"><Mail className="ci" /><div><b>{t('checkout.email')}</b><span dir="ltr">{c.email}</span></div></li>
+            )}
+            {!isPlaceholderAddress(c.address) && (
+              <li className="card"><Pin className="ci" /><div><b>{t('footer.address')}</b><span>{c.address}</span></div></li>
+            )}
+            {c.hours && hasRealContact(c) && (
+              <li className="card"><Clock className="ci" /><div><b>{t('footer.hours')}</b><span>{c.hours}</span></div></li>
+            )}
+            {!hasRealContact(c) && (
+              <li className="card"><div><b>{t('pages.contactUnset')}</b></div></li>
+            )}
           </ul>
         </div>
 

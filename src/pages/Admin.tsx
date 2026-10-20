@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { waLink } from '../data/util'
+import { waLink, bankIsPlaceholder, isPlaceholderPhone, isPlaceholderEmail, isPlaceholderAddress } from '../data/util'
 import { useI18n } from '../i18n'
 import { useApp } from '../state/app'
 import { api } from '../data/api'
@@ -236,6 +236,7 @@ function CategoriesTab({ products, notify, onSaved }: { products: Product[]; not
   const { categories } = useApp()
   const [draft, setDraft] = useState<Category>(() => newCategoryTemplate())
   const [list, setList] = useState<Category[]>(categories)
+  const isExisting = list.some((x) => x.id === draft.id)
 
   useEffect(() => setList(categories), [categories])
 
@@ -288,7 +289,7 @@ function CategoriesTab({ products, notify, onSaved }: { products: Product[]; not
 
         <div className="cat-form">
           <div className="form-grid">
-            <div className="field"><label>Slug</label><input className="input" dir="ltr" value={draft.slug} onChange={(e) => setDraft({ ...draft, slug: e.target.value.replace(/\s+/g, '-').toLowerCase() })} /></div>
+            <div className="field"><label>Slug</label><input className="input" dir="ltr" disabled={isExisting} value={draft.slug} onChange={(e) => setDraft({ ...draft, slug: e.target.value.replace(/\s+/g, '-').toLowerCase() })} /></div>
             <div className="field"><label>Experience (beauty|health)</label>
               <select className="input" value={draft.experience} onChange={(e) => setDraft({ ...draft, experience: e.target.value as Category['experience'] })}>
                 <option value="beauty">beauty</option>
@@ -368,7 +369,7 @@ function OrdersTab({ orders, setOrders, notify }: { orders: Order[]; setOrders: 
             </dl>
             <div className="ord-status">
               <label>{t('admin.statusCol')}</label>
-              <select className="input" value={open.status} onChange={(e) => upd(open.id, e.target.value as OrderStatus)}>
+              <select className="input" value={open.status} disabled={open.status === 'cancelled'} onChange={(e) => upd(open.id, e.target.value as OrderStatus)}>
                 {statuses.map((s) => <option key={s} value={s}>{t(`account.st_${s}`)}</option>)}
               </select>
               <Link className="btn btn-outline btn-sm" to={`/invoice/${open.number}`} target="_blank">🧾 {t('invoice.print')}</Link>
@@ -456,8 +457,7 @@ function SettingsTab({ settings, promos, products, notify, onSaved }: {
   }
 
   // warn when bank details are still the seeded placeholders
-  const bankIsExample =
-    /SA00/i.test(s.payments.bankIban || '') || /مثال|example/i.test(s.payments.bankName || '')
+  const bankIsExample = bankIsPlaceholder(s.payments)
 
   return (
     <div className="admin-body">
@@ -480,9 +480,9 @@ function SettingsTab({ settings, promos, products, notify, onSaved }: {
           <div className="field"><label>{t('admin.cAddress')}</label><input className="input" value={s.contacts.address} onChange={(e) => setS({ ...s, contacts: { ...s.contacts, address: e.target.value } })} /></div>
           <div className="field"><label>{t('admin.cHours')}</label><input className="input" value={s.contacts.hours} onChange={(e) => setS({ ...s, contacts: { ...s.contacts, hours: e.target.value } })} /></div>
         </div>
-        {/0000000|example/i.test(s.contacts.phone + s.contacts.email) && (
-          <p className="alert alert-error">{t('admin.contactsUnset')}</p>
-        )}
+        {(!isPlaceholderPhone(s.contacts.phone) && !isPlaceholderEmail(s.contacts.email) && !isPlaceholderAddress(s.contacts.address))
+          ? null
+          : <p className="alert alert-error">{t('admin.contactsUnset')}</p>}
 
         <h3 className="mt">💵 {t('admin.payTitle')}</h3>
         <div className="form-grid">
@@ -730,6 +730,7 @@ function AdminProductForm({ product, all, categories, notify, onCancel, onSaved 
             <input
               className={`input${slugTaken ? ' invalid' : ''}`}
               dir="ltr"
+              disabled={!isNew}
               value={p.slug}
               onChange={(e) => {
                 setSlugTouched(true)

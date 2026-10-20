@@ -4,7 +4,7 @@ import { useI18n } from '../i18n'
 import { api } from '../data/api'
 import { useApp } from '../state/app'
 import LanguageSelect from './LanguageSelect'
-import { waLink } from '../data/util'
+import { waLink, isPlaceholderPhone, isPlaceholderEmail, isPlaceholderAddress, hasRealContact } from '../data/util'
 import Logo from './Logo'
 import { Mail, Phone, Pin, Clock } from './Icons'
 
@@ -39,10 +39,10 @@ export default function Footer() {
           <p className="f-about">{t('footer.about')}</p>
           <p className="tagline">Wellness · Balance · Vitality</p>
           <ul className="f-contact">
-            <li><Pin size={15} /> {c.address}</li>
-            <li><Mail size={15} /> <a dir="ltr" href={`mailto:${c.email}`}>{c.email}</a></li>
-            <li><Phone size={15} /> <a dir="ltr" href={`tel:${c.phone}`}>{c.phone}</a></li>
-            <li><Clock size={15} /> {c.hours}</li>
+            {!isPlaceholderAddress(c.address) && <li><Pin size={15} /> {c.address}</li>}
+            {!isPlaceholderEmail(c.email) && <li><Mail size={15} /> <a dir="ltr" href={`mailto:${c.email}`}>{c.email}</a></li>}
+            {!isPlaceholderPhone(c.phone) && <li><Phone size={15} /> <a dir="ltr" href={`tel:${c.phone}`}>{c.phone}</a></li>}
+            {c.hours && hasRealContact(c) && <li><Clock size={15} /> {c.hours}</li>}
           </ul>
         </div>
 
@@ -90,18 +90,20 @@ export default function Footer() {
         <p>{t('footer.disclaimer')}</p>
         <p>© {new Date().getFullYear()} Health Harmony — {t('footer.rights')}</p>
       </div>
-      <a
-        className="wa-float"
-        href={waLink(settings.contacts.phone, t('wa.hello'))}
-        target="_blank"
-        rel="noreferrer"
-        title="WhatsApp"
-        aria-label="WhatsApp"
-      >
-        <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-          <path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2Zm5.3 14.1c-.2.6-1.2 1.2-1.7 1.2-.4 0-1 0-2-.4a11.4 11.4 0 0 1-4.6-4c-.6-.9-1-2-1-2.9 0-1 .5-1.5.7-1.7.2-.2.5-.3.7-.3h.5c.2 0 .4 0 .6.4l.8 1.9c.1.2.1.4 0 .6l-.4.6c-.1.2-.2.3 0 .5.7 1.2 1.6 2 2.8 2.6.2.1.4.1.5 0l.7-.8c.2-.2.4-.2.6-.1l1.8.8c.3.2.4.3.4.5s0 .8-.3 1.1Z" />
-        </svg>
-      </a>
+      {!isPlaceholderPhone(c.phone) && (
+        <a
+          className="wa-float"
+          href={waLink(c.phone, t('wa.hello'))}
+          target="_blank"
+          rel="noreferrer"
+          title="WhatsApp"
+          aria-label="WhatsApp"
+        >
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2Zm5.3 14.1c-.2.6-1.2 1.2-1.7 1.2-.4 0-1 0-2-.4a11.4 11.4 0 0 1-4.6-4c-.6-.9-1-2-1-2.9 0-1 .5-1.5.7-1.7.2-.2.5-.3.7-.3h.5c.2 0 .4 0 .6.4l.8 1.9c.1.2.1.4 0 .6l-.4.6c-.1.2-.2.3 0 .5.7 1.2 1.6 2 2.8 2.6.2.1.4.1.5 0l.7-.8c.2-.2.4-.2.6-.1l1.8.8c.3.2.4.3.4.5s0 .8-.3 1.1Z" />
+          </svg>
+        </a>
+      )}
     </footer>
   )
 }

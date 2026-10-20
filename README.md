@@ -18,26 +18,24 @@ fitness and wellness products, with legally compliant health products controls.
 
 | Mode | When | Behavior |
 |---|---|---|
-| **Demo** (default) | No Supabase credentials in `.env` (dev server, or `VITE_ALLOW_DEMO=true`) | Full site works against a seeded local catalog; orders, accounts, reviews, addresses and admin editing persist in `localStorage` of that browser (`hh_demo_db_v2`). |
+| **Demo** (development only) | No Supabase credentials in `.env` while running `npm run dev` | Full site works against a seeded local catalog; orders, accounts, reviews, addresses and admin editing persist in `localStorage` of that browser (`hh_demo_db_v2`). |
 | **Supabase** | `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY` present | Reads/writes the real database through RLS; orders are created **only** by the `orders-create` edge function which re-verifies all prices server-side. |
 
 > **Production guard:** a PROD build **without** Supabase keys shows a clear setup-error
-> screen instead of an empty demo store. To preview a production build in demo mode,
-> set `VITE_ALLOW_DEMO=true` in `.env`.
+> screen. Demo mode is never used by a production bundle — there is no opt-in flag.
+> If Supabase is configured but unreachable, the store shows a database-error screen
+> and retries; it never falls back to local data or records a fake order.
 
 The service-role key is **never** exposed to the frontend; it is used only inside
-`supabase/functions/orders-create` and `supabase/functions/orders-get`.
+`supabase/functions/orders-create`, `orders-get` and `promos-check`.
 
-### Demo credentials
+### Demo data (local development only)
 
-| Role | Email | Password |
-|---|---|---|
-| Customer | `demo@healthharmony.com` | `demo1234` |
-| Admin | `admin@healthharmony.com` | `admin1234` |
-
-Promo codes: `HARMONY10` (−10%) · `WELCOME15` (−15 SAR). Free shipping over 300 SAR.
-In Supabase mode you can also sign in with a Saudi mobile (`05xxxxxxxx`) — the phone is
-resolved to its bound email through the `find_email_by_phone` RPC.
+The seeded local database contains a demo customer and a demo admin, plus promo codes
+`HARMONY10` (−10%) and `WELCOME15` (−15 SAR). These accounts exist **only** in the
+browser's demo database and are never created in Supabase; production requires a real
+admin user promoted through SQL (step 9 below). Sign-in is email-based (the old
+phone→email lookup RPC is service-role-only to prevent customer enumeration).
 
 ## Getting started
 
@@ -57,29 +55,33 @@ npm run check:i18n   # verify ar/en/tl dictionaries cover every t('...') key
    RLS, storage bucket). It is **idempotent** — safe to re-run.
 3. Run `supabase/migrations/0002_stock_and_payment.sql` (atomic `decrement_stock` +
    compensating `restore_stock`, admin-only `restock_order`, guest-safe
-   `get_guest_order`, and the phone→email `find_email_by_phone` login RPC).
-4. Seed the catalog: run `node scripts/gen-seed.mjs` (regenerates `supabase/seed.sql`
+   `get_guest_order`, and the legacy phone→email lookup RPC).
+4. Run `supabase/migrations/0003_production_hardening.sql` (idempotent): adds
+   `orders.restocked_at`, exactly-once restocking, the atomic `set_order_status`
+   RPC, normalized guest-phone matching, and revokes stock/phone helper RPCs from
+   anonymous/authenticated clients. It does not delete or rewrite rows.
+5. Seed the catalog: run `node scripts/gen-seed.mjs` (regenerates `supabase/seed.sql`
    from `src/data/catalog.ts`, skipping unapproved regulated products), then run
    `supabase/seed.sql` in the SQL editor. Re-run it whenever the seed changes.
-5. Deploy the edge functions:
+6. Deploy the edge functions:
    ```bash
    supabase functions deploy orders-create
    supabase functions deploy orders-get      # guest order lookup (number + phone)
    supabase functions deploy promos-check
    ```
-6. Fill `.env` from `.env.example`:
+7. Fill `.env` from `.env.example`:
    ```
    VITE_SUPABASE_URL=https://<ref>.supabase.co
    VITE_SUPABASE_ANON_KEY=<anon key>
    ```
-7. In Supabase Auth settings enable email/password sign-ups.
-8. In Supabase Auth URL configuration add `<origin>/reset-password` to the allowed
+8. In Supabase Auth settings enable email/password sign-ups.
+9. In Supabase Auth URL configuration add `<origin>/reset-password` to the allowed
    redirect URLs (password-recovery links land there).
-9. Promote an admin: verify a user, then in SQL
-   `update public.profiles set role='admin' where email='...'`.
-10. Open `/admin` → Settings and replace the placeholder bank name/IBAN and the
-    contact details (phone / email / address / hours). Bank transfer stays hidden
-    from customers until real IBAN details are saved.
+10. Promote an admin: verify a user, then in SQL
+    `update public.profiles set role='admin' where email='...'`.
+11. Open `/admin` → Settings and replace the placeholder bank name/IBAN and the
+    contact details (phone / email / address / hours). Bank transfer and the
+    WhatsApp button stay hidden from customers until real values are saved.
 
 ### Data-flow notes
 
@@ -92,6 +94,14 @@ npm run check:i18n   # verify ar/en/tl dictionaries cover every t('...') key
   optional reviewer note.
 - Stock: `decrement_stock` reserves stock **before** order insert; a failed insert
   rolls the reservation back via `restore_stock` (no oversell, no leaks).
+- Cancelling an order calls `set_order_status`, which locks the order row, changes
+  the status and returns the items to stock in one transaction. `orders.restocked_at`
+  guarantees a retry can never restock the same order twice.
+- Admin order writes are restricted to that RPC; direct table updates are revoked for
+  signed-in users, so stock and status cannot drift apart.
+- Contact details, WhatsApp, bank details and testimonials are only rendered when they
+  are real. Seeded placeholders (`0550000000`, `…example`, `SA00…`) and demo reviews
+  are hidden from the storefront.
 
 ## Payments — honest status
 
@@ -128,7 +138,7 @@ both in demo mode and in the `orders-create` edge function.
 
 `/policies/privacy` · `/policies/terms` · `/policies/shipping` · `/policies/returns` · `/policies/regulated`
 
-Contact details shown in the footer / WhatsApp button come from
-`/admin` → Settings → "بيانات التواصل" (defaults are clearly placeholders and the
-admin panel warns until they are replaced).
+Contact details shown in the footer, the Contact page and the WhatsApp button come from
+`/admin` → Settings → "بيانات التواصل". Placeholder values are hidden from customers
+(and the admin panel warns) until they are replaced.
 

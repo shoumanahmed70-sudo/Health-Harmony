@@ -34,6 +34,10 @@ export default function Cart() {
       : Math.min(applied.value, subtotal)
     : 0
   const shippingEstimate = subtotal - discount >= settings.freeOver ? 0 : settings.shipStandard
+  const tax = settings.vatInclusive === false && settings.vat > 0
+    ? Math.round(((subtotal - discount) * settings.vat) / 100 * 100) / 100
+    : 0
+  const totalEstimate = Math.max(0, subtotal - discount + shippingEstimate + tax)
 
   void user
 
@@ -44,6 +48,7 @@ export default function Cart() {
     if (pr) {
       setApplied(pr)
       setPromoErr('')
+      try { window.sessionStorage.setItem('hh_promo', pr.code) } catch { /* ignore */ }
       notify(t('cart.promoApplied'))
     } else {
       setApplied(null)
@@ -95,7 +100,8 @@ export default function Cart() {
               <div><dt>{t('cart.subtotal')}</dt><dd>{money(subtotal)}</dd></div>
               {discount > 0 && <div className="ok"><dt>{t('cart.discount')}</dt><dd>−{money(discount)}</dd></div>}
               <div><dt>{t('cart.shipping')}</dt><dd>{shippingEstimate === 0 ? t('cart.free') : money(shippingEstimate)}</dd></div>
-              <div className="grand"><dt>{t('cart.total')}</dt><dd>{money(Math.max(0, subtotal - discount + shippingEstimate))}</dd></div>
+              {tax > 0 && <div><dt>{t('cart.vat')} ({settings.vat}%)</dt><dd>{money(tax)}</dd></div>}
+              <div className="grand"><dt>{t('cart.total')}</dt><dd>{money(totalEstimate)}</dd></div>
             </dl>
 
             {subtotal < settings.freeOver && (
@@ -112,7 +118,7 @@ export default function Cart() {
               {t('cart.checkoutBtn')}
             </button>
             <Link to="/shop" className="link-muted">{t('cart.continue')}</Link>
-            <p className="muted small">{t('cart.vatNote')}</p>
+            <p className="muted small">{settings.vatInclusive === false ? t('cart.vatExclNote') : t('cart.vatNote')}</p>
           </aside>
         </div>
       </div>

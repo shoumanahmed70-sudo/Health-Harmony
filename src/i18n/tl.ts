@@ -122,6 +122,7 @@ export default {
 
   shop: {
     title: 'Lahat ng Produkto',
+    searchTitle: 'Mga resulta ng paghahanap',
     results: 'produkto',
     filters: 'Mga Filter',
     category: 'Kategorya',
@@ -167,8 +168,10 @@ export default {
     subtotal: 'Subtotal',
     discount: 'Diskwento',
     shipping: 'Shipping',
+    vat: 'VAT',
     free: 'Libre',
     vatNote: 'Kasama sa presyo ang VAT kung saan naaangkop.',
+    vatExclNote: 'Idinadagdag ang VAT sa kabuuan ayon sa rate na itinakda ng tindahan.',
     checkoutBtn: 'Checkout',
     code: 'Promo code',
     apply: 'I-apply',
@@ -210,6 +213,8 @@ export default {
     okTitle: 'Natanggap nang matagumpay ang order mo 🎉',
     okText: 'Tatawagan ka namin para kumpirmahin ang order at detalye ng paghahatid. Salamat sa pagtitiwala sa Health Harmony.',
     okTextDemo: 'Demo mode: lokal na demo order number ito. Totoong naka-imbak ang mga order kapag nakakonekta na ang database.',
+    orderNotFound: 'Hindi nahanap ang order',
+    orderNotFoundSub: 'Hindi namin mahanap ang order na ito. Suriin ang numero at gamitin ang parehong browser/telepono na ginamit sa checkout.',
     orderNo: 'Numero ng order',
     home: 'Bumalik sa Home',
     continue: 'Tuloy ang Pamimili',
@@ -237,8 +242,8 @@ export default {
     registerTitle: 'Gumawa ng Health Harmony account',
     registerSub: 'Subaybayan ang mga order, i-save ang mga address at makaalam agad ng mga promo.',
     email: 'Email',
-    identifier: 'Email o mobile number',
-    identifierHint: 'hal.: 05XXXXXXXX o name@mail.com',
+    identifier: 'Email',
+    identifierHint: 'name@mail.com',
     phone: 'Mobile number',
     password: 'Password',
     confirm: 'Kumpirmahin ang Password',
@@ -260,7 +265,8 @@ export default {
     errLogin: 'Mali ang email o password',
     errInUse: 'Naka-rehistro na ang email na ito',
     okRegister: 'Nagawa na ang account — puwede ka nang mag-sign in',
-    demo: 'Demo mode: demo@healthharmony.com / demo1234',
+    confirmEmail: 'Nagawa ang account. Tingnan ang inbox para kumpirmahin ang email, pagkatapos ay mag-sign in.',
+    demoReset: 'Demo mode: walang email na ipinapadala. Gumagana ang password reset kapag naka-configure na ang Supabase Auth.',
   },
 
   account: {
@@ -308,6 +314,7 @@ export default {
   pages: {
     contactTitle: 'Makipag-ugnayan sa Amin',
     contactSub: 'Handa ang aming team tumulong — sa Arabe, Ingles o Filipino.',
+    contactUnset: 'Ilalathala rin dito sa lalong madaling panahon ang mga detalye ng contacto. Maaari ka pa ring magpadala ng mensahe gamit ang form.',
     formTitle: 'Magpadala sa Amin ng Mensahe',
     formName: 'Pangalan mo',
     formEmail: 'Email mo',
@@ -489,6 +496,9 @@ export default {
 
   setup: {
     title: 'Hindi pa kumpleto ang setup ng proyekto',
-    sub: 'Ang production build ay nangangailangan ng Supabase keys sa .env (VITE_SUPABASE_URL at VITE_SUPABASE_ANON_KEY). Para sa local development lang, magdagdag ng VITE_ALLOW_DEMO=true upang payagan ang demo mode.',
+    sub: 'Ang production build ay nangangailangan ng Supabase keys sa .env (VITE_SUPABASE_URL at VITE_SUPABASE_ANON_KEY). Ang demo mode ay para sa local development lang at hindi ginagamit sa production build.',
+    dbTitle: 'Hindi available ang database ng tindahan',
+    dbSub: 'Hindi maabot ng tindahan ang database nito, kaya pansamantalang hindi available ang mga produkto at order. Suriin ang Supabase URL/keys, RLS migration at project status, pagkatapos ay subukan muli.',
+    retry: 'Subukan muli',
   },
 } as Dictionary
