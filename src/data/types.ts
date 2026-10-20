@@ -54,6 +54,8 @@ export interface Review {
   rating: number
   comment: string
   createdAt: string
+  /** bundled starter review (demo only): shown with a "demo review" tag and never counted in averages */
+  seed?: boolean
 }
 
 export interface Address {
@@ -121,9 +123,13 @@ export interface Settings {
   shipExpress: number
   freeOver: number
   vat: number
+  /** prices already include VAT (B2C norm) — when false, VAT is added on top at order time */
+  vatInclusive: boolean
   storeName: L10n
   banners: Banner[]
   payments: { cod: boolean; bank: boolean; bankName: string; bankIban: string; bankNote: string }
+  /** admin-managed contact details (footer, WhatsApp, invoices) */
+  contacts: { phone: string; email: string; address: string; hours: string }
 }
 
 /** Promo codes are simple site-level coupons; validated against settings-backed list in demo, promos table in Supabase. */

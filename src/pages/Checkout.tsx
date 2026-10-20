@@ -5,22 +5,26 @@ import { useApp } from '../state/app'
 import { api } from '../data/api'
 import { PageHead, productTitle } from '../components/ui'
 import { productTitle as pt } from '../data/util'
-import type { Product, Settings } from '../data/types'
+import type { Product } from '../data/types'
 
 type Errors = Partial<Record<'name' | 'email' | 'phone' | 'city' | 'street' | 'agree', string>>
 
 export default function Checkout() {
   const { t, locale, money } = useI18n()
   const { cart, products, settings, user, clearCart, notify } = useApp()
-  const payFallback = settings.payments as Partial<Settings['payments']> | undefined
+  const s = settings.payments ?? { cod: false, bank: false, bankName: '', bankIban: '', bankNote: '' }
+  // seed placeholders ("SA00…"/مثال/example) mean the admin has not set real bank
+  // details yet — bank transfer stays hidden from customers until they do
+  const bankIsPlaceholder =
+    !s.bankIban.trim() || /SA00/i.test(s.bankIban) || /مثال|example/i.test(s.bankName)
   const pay = {
-    cod: true,
-    bank: true,
-    bankName: 'Al-Ahli Bank — Health Harmony (example)',
-    bankIban: 'SA00 0000 0000 0000 0000 0000',
-    bankNote: t('checkout.bankNote'),
-    ...(payFallback ?? {}),
-  } as Settings['payments']
+    cod: Boolean(s.cod),
+    bank: Boolean(s.bank) && !bankIsPlaceholder,
+    bankName: s.bankName,
+    bankIban: s.bankIban,
+    bankNote: s.bankNote || t('checkout.bankNote'),
+  }
+  const defaultPayment = pay.cod ? 'cod' : pay.bank ? 'bank' : ''
   const nav = useNavigate()
   const loc = useLocation() as { state?: { promo?: string | null } }
 
@@ -37,7 +41,7 @@ export default function Checkout() {
     building: '',
     notes: '',
     shippingMethod: 'standard' as 'standard' | 'express',
-    payment: 'cod' as 'cod' | 'bank',
+    payment: (defaultPayment as 'cod' | 'bank' | '') as 'cod' | 'bank',
     agree: false,
   })
   const [errors, setErrors] = useState<Errors>({})
@@ -124,7 +128,13 @@ export default function Checkout() {
     )
     setPlacing(false)
     if ('err' in res) {
-      setOrderErr(t('err.generic'))
+      // personalized message per server error code
+      setOrderErr(
+        res.err === 'AGE_LOGIN_REQUIRED' ? t('err.age18')
+          : res.err === 'OUT_OF_STOCK' ? t('err.outOfStock')
+          : res.err === 'PAYMENT_DISABLED' ? t('err.paymentDisabled')
+          : t('err.edge'),
+      )
       return
     }
     clearCart()
@@ -190,7 +200,7 @@ export default function Checkout() {
             <div className="ship-cards">
               <button type="button" className={`ship-opt${f.shippingMethod === 'standard' ? ' on' : ''}`} onClick={() => set('shippingMethod', 'standard')}>
                 <strong>{t('checkout.standard')}</strong>
-                <span>{t('checkout.standardEta')} · {subtotal >= settings.freeOver ? t('cart.free') : money(settings.shipStandard)}</span>
+                <span>{t('checkout.standardEta')} · {subtotal - discount >= settings.freeOver ? t('cart.free') : money(settings.shipStandard)}</span>
               </button>
               <button type="button" className={`ship-opt${f.shippingMethod === 'express' ? ' on' : ''}`} onClick={() => set('shippingMethod', 'express')}>
                 <strong>{t('checkout.express')}</strong>
@@ -226,11 +236,14 @@ export default function Checkout() {
                   <span aria-hidden="true">💳</span>
                   <div>
                     <strong>{t('checkout.cardSoon')}</strong>
-                    <span>Supabase · Stripe/Mada — <i>integration marked as pending configuration</i></span>
                   </div>
                 </div>
               </div>
             </div>
+
+            {!defaultPayment && (
+              <p className="alert alert-error">{t('err.paymentDisabled')}</p>
+            )}
 
             {hasAge18 && (
               <p className="alert alert-info">
@@ -246,7 +259,7 @@ export default function Checkout() {
 
             {orderErr && <p className="alert alert-error">{orderErr}</p>}
 
-            <button className="btn btn-primary btn-lg btn-block" disabled={placing} onClick={place}>
+            <button className="btn btn-primary btn-lg btn-block" disabled={placing || !defaultPayment} onClick={place}>
               {placing ? t('checkout.placing') : `${t('checkout.place')} — ${money(total)}`}
             </button>
           </div>

@@ -61,6 +61,7 @@ export default {
     newsPlaceholder: 'Email address mo',
     newsBtn: 'Mag-subscribe',
     newsOk: 'Natanggap ang email — salamat sa pag-subscribe!',
+    newsErr: 'Hindi maisubscribe — pakisubukan muli mamaya.',
     newsInvalid: 'Maglagay ng wastong email address.',
     viewAll: 'Tingnan lahat',
   },
@@ -78,6 +79,7 @@ export default {
 
   product: {
     addToCart: 'Idagdag sa Cart',
+    price: 'Presyo',
     added: 'Naidagdag sa cart ✓',
     viewDetails: 'Tingnan ang Detalye',
     out: 'Wala nang Stock',
@@ -90,6 +92,7 @@ export default {
     reviews: 'review',
     write: 'Isulat ang Review',
     loginToWrite: 'Mag-sign in para makapagsulat ng review',
+    seedReview: 'Demo review',
     noReviews: 'Wala pang review ang produktong ito.',
     qty: 'Dami',
     sku: 'SKU',
@@ -175,6 +178,7 @@ export default {
 
   checkout: {
     title: 'Checkout',
+    shipping: 'Pagpapadala',
     contact: 'Impormasyon sa Pakikipag-ugnayan',
     address: 'Address ng Paghahatid',
     name: 'Buong Pangalan',
@@ -219,6 +223,10 @@ export default {
     reqStreet: 'Ilagay ang kalsada',
     reqAgree: 'Kailangang sumang-ayon sa mga patakaran ng tindahan',
     generic: 'May naganap na mali — pakisubukan muli.',
+    outOfStock: 'May isang aytem na naubos ang stock — i-update ang cart at subukan ulit.',
+    age18: 'Kailangan ng pag-sign in para sa mga produktong 18+ bago makumpleto ang order.',
+    paymentDisabled: 'Ang napiling paraan ng pagbabayad ay hindi kasalukuyang available.',
+    edge: 'Hindi magawa ang order ngayon — pakisubukan muli, o kontakin kami kung magpatuloy.',
   },
 
   auth: {
@@ -342,6 +350,7 @@ export default {
   },
 
   wa: {
+    hello: 'Kumusta, gusto kong magtanong tungkol sa mga produkto ninyo 💚',
     ready: 'Inihahanda na ang order mo na {number} sa Health Harmony — aabisuhan ka naming kapag naisapadya na 💚',
     readyBtn: 'WhatsApp: ready na ang order',
     shipped: 'Papunta na sa iyo ngayon ang order mo na {number} 🚚 — Health Harmony 💚',
@@ -351,6 +360,7 @@ export default {
   invoice: {
     title: 'Resibo',
     back: 'Bumalik sa order',
+    item: 'Aytem',
     print: 'I-print / I-save bilang PDF',
     no: 'Bilang ng Resibo',
     soldTo: 'Detalye ng customer',
@@ -358,10 +368,14 @@ export default {
     legalNote: 'Elektronikong inisyu na resibo, nakakabit sa order sa paghahatid.',
     thanks: 'Salamat sa pambling sa Health Harmony 💚',
     footerNote: 'Panatilihin ang resibong ito kasama ang order hanggang sa paghahatid. Cash on delivery (COD).',
+    vatLabel: 'VAT',
+    vatIncl: 'Kasama sa kabuuang halaga ang VAT.',
+    vatExcl: 'Ang VAT ay idadagdag sa presyong nakalista.',
   },
 
   admin: {
     title: 'Admin Dashboard',
+    brand: 'Tatak',
     welcome: 'Kumusta {name} 👋 mabilisang tingin sa iyong tindahan ngayon',
     payTitle: 'Mga paraan ng pagbabayad',
     payBankName: 'Pangalan ng bank',
@@ -406,6 +420,15 @@ export default {
     cat: 'Kategorya',
     image: 'Image URL',
     imgOr: 'O mag-upload ng imahe mula sa device mo',
+    slug: 'Slug',
+    slugTaken: 'Ginagamit na ng ibang produkto ang slug na ito',
+    active: 'Aktibong produkto',
+    catHasProducts: 'Hindi mabura ang kategoryang may {n} produkto — ilipat o burahin muna.',
+    payAtLeastOne: 'Paganahin ang kahit isang paraan ng pagbabayad bago i-save.',
+    payPlaceholder: 'Ang bank name/IBAN ay placeholder pa — hindi makikita ng customer ang bank transfer hanggang hindi ito pinapalitan.',
+    note: 'Tala ng reviewer (opsyonal)',
+    noteHint: 'Naitatago kasama ang desisyon sa regulated_approvals',
+    st_inactive: 'Hindi aktibo',
     featured: 'Tampok',
     bestseller: 'Best seller',
     newArrival: 'Bagong datng',
@@ -423,6 +446,13 @@ export default {
     shipExpress: 'Express shipping fee (SAR)',
     freeOver: 'Libreng shipping sa itaas ng (SAR)',
     vat: 'VAT %',
+    vatIncl: 'Kasama sa presyo ang VAT',
+    contactsTitle: 'Mga detalye ng contacto (footer at WhatsApp)',
+    cPhone: 'Telepono',
+    cEmail: 'Email',
+    cAddress: 'Address',
+    cHours: 'Oras ng trabaho',
+    contactsUnset: 'Ang mga detalye ng contacto ay default pa — i-update bago i-launch.',
     siteNameAr: 'Pangalan ng tindahan (Arabe)',
     siteNameEn: 'Pangalan ng tindahan (Ingles)',
     role: 'Rol',
@@ -447,5 +477,18 @@ export default {
     title: 'Hindi Natagpuan ang Pahina',
     sub: 'Hindi available o nailipat ang link na hiniling mo.',
     back: 'Bumalik sa Home',
+  },
+
+  resetpw: {
+    title: 'Bagong Password',
+    sub: 'Pumili ng bagong password para sa iyong account, tapos i-save.',
+    password: 'Bagong password',
+    save: 'I-save ang password',
+    saved: 'Na-update ang password ✓',
+  },
+
+  setup: {
+    title: 'Hindi pa kumpleto ang setup ng proyekto',
+    sub: 'Ang production build ay nangangailangan ng Supabase keys sa .env (VITE_SUPABASE_URL at VITE_SUPABASE_ANON_KEY). Para sa local development lang, magdagdag ng VITE_ALLOW_DEMO=true upang payagan ang demo mode.',
   },
 } as Dictionary

@@ -61,7 +61,7 @@ export default function Invoice() {
             </div>
             <div>
               <h3>{t('invoice.shipTo')}</h3>
-              <p>{order.address.city} — {order.address.district}</p>
+              <p><b>{[order.address.city, order.address.district].filter(Boolean).join(' — ')}</b></p>
               <p className="muted">{order.address.street}{order.address.building ? `, ${order.address.building}` : ''}</p>
             </div>
             <div className="invoice-facts">
@@ -75,7 +75,7 @@ export default function Invoice() {
             <thead>
               <tr>
                 <th>#</th>
-                <th>{t('shop.addToCart')}</th>
+                <th>{t('invoice.item')}</th>
                 <th>{t('product.qty')}</th>
                 <th>{t('product.price')}</th>
                 <th>{t('cart.total')}</th>
@@ -101,7 +101,22 @@ export default function Invoice() {
                 <div><dt>{t('cart.discount')}</dt><dd className="pos">− {money(order.discount)}</dd></div>
               )}
               <div><dt>{t('cart.shipping')}</dt><dd>{order.shipping === 0 ? t('cart.free') : money(order.shipping)}</dd></div>
+              {settings.vat > 0 && (
+                <div>
+                  <dt>{t('invoice.vatLabel')} ({settings.vat}%)</dt>
+                  <dd>
+                    {settings.vatInclusive === false
+                      ? money(Math.round(((order.subtotal - order.discount) * settings.vat) / 100 * 100) / 100)
+                      : money(Math.round((order.total - order.total / (1 + settings.vat / 100)) * 100) / 100)}
+                  </dd>
+                </div>
+              )}
               <div className="invoice-grand"><dt>{t('cart.total')}</dt><dd><b>{money(order.total)}</b></dd></div>
+              {settings.vat > 0 && (
+                <p className="muted small">
+                  {settings.vatInclusive === false ? t('invoice.vatExcl') : t('invoice.vatIncl')}
+                </p>
+              )}
             </dl>
           </section>
 

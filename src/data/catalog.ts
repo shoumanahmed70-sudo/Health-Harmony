@@ -645,6 +645,7 @@ const rv = (
   rating,
   comment: comment[0], // store the submitted text as-is (reviews are not machine-translated)
   createdAt: new Date(now - daysAgo * DAY).toISOString(),
+  seed: true, // starter review — tagged in the UI, excluded from rating averages
 })
 
 export const REVIEWS: Review[] = [
@@ -666,7 +667,14 @@ export const DEFAULT_SETTINGS: Settings = {
   shipExpress: 45,
   freeOver: 300,
   vat: 15,
+  vatInclusive: true,
   storeName: { ar: 'Health Harmony', en: 'Health Harmony', tl: 'Health Harmony' },
+  contacts: {
+    phone: '0550000000', // placeholder — replace from the admin dashboard
+    email: 'care@health-harmony.example',
+    address: 'الرياض — حي العليا (عدّل من لوحة الأدمن)',
+    hours: 'السبت–الخميس 9ص–9م',
+  },
   payments: {
     cod: true,
     bank: true,
@@ -689,7 +697,7 @@ export const DEFAULT_SETTINGS: Settings = {
       sort: 2,
       title: { ar: 'روتين رشاقة متوازن', en: 'A balanced fitness routine', tl: 'Balanseng fitness routine' },
       sub: { ar: 'تجهيزات تدعم نشاطك اليومي في المنزل', en: 'Gear for your home training days', tl: 'Kagamitan para sa home workout mo' },
-      ctaLink: '/shop/fitness',
+      ctaLink: '/shop',
     },
   ] as Banner[],
 }

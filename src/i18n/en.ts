@@ -61,6 +61,7 @@ export default {
     newsPlaceholder: 'Your email address',
     newsBtn: 'Subscribe',
     newsOk: 'Email received — thank you for subscribing!',
+    newsErr: 'Could not subscribe — please try again later.',
     newsInvalid: 'Please enter a valid email address.',
     viewAll: 'View All',
   },
@@ -78,6 +79,7 @@ export default {
 
   product: {
     addToCart: 'Add to Cart',
+    price: 'Price',
     added: 'Added to cart ✓',
     viewDetails: 'View Details',
     out: 'Out of Stock',
@@ -90,6 +92,7 @@ export default {
     reviews: 'reviews',
     write: 'Write a Review',
     loginToWrite: 'Sign in to write a review',
+    seedReview: 'Demo review',
     noReviews: 'No reviews for this product yet.',
     qty: 'Quantity',
     sku: 'SKU',
@@ -175,6 +178,7 @@ export default {
 
   checkout: {
     title: 'Checkout',
+    shipping: 'Shipping',
     contact: 'Contact Information',
     address: 'Delivery Address',
     name: 'Full Name',
@@ -219,6 +223,10 @@ export default {
     reqStreet: 'Please enter your street',
     reqAgree: 'You must agree to the store policies',
     generic: 'Something went wrong — please try again.',
+    outOfStock: 'One of the items just went out of stock — update your cart and retry.',
+    age18: '18+ products require signing in to complete your order.',
+    paymentDisabled: 'The selected payment method is currently unavailable.',
+    edge: 'Could not create the order right now — please try again, or contact us if it persists.',
   },
 
   auth: {
@@ -342,6 +350,7 @@ export default {
   },
 
   wa: {
+    hello: 'Hello, I would like to ask about your products 💚',
     ready: 'Your order {number} is being prepared at Health Harmony — we will notify you once it ships 💚',
     readyBtn: 'WhatsApp: order ready',
     shipped: 'Your order {number} is now on its way to you with our delivery partner 🚚 — Health Harmony 💚',
@@ -351,6 +360,7 @@ export default {
   invoice: {
     title: 'Invoice',
     back: 'Back to order',
+    item: 'Item',
     print: 'Print / Save PDF',
     no: 'Invoice No.',
     soldTo: 'Customer details',
@@ -358,10 +368,14 @@ export default {
     legalNote: 'Electronically issued invoice, attached to the order at delivery.',
     thanks: 'Thank you for shopping with Health Harmony 💚',
     footerNote: 'Keep this invoice with the order until delivery. Cash on delivery (COD).',
+    vatLabel: 'VAT',
+    vatIncl: 'Totals include VAT.',
+    vatExcl: 'VAT is calculated on top of the listed prices.',
   },
 
   admin: {
     title: 'Admin Dashboard',
+    brand: 'Brand',
     welcome: 'Hi {name} 👋 a quick look at your store today',
     payTitle: 'Payment methods',
     payBankName: 'Bank name',
@@ -406,6 +420,15 @@ export default {
     cat: 'Category',
     image: 'Image URL',
     imgOr: 'Or upload an image from your device',
+    slug: 'Slug',
+    slugTaken: 'This slug is used by another product',
+    active: 'Active product',
+    catHasProducts: 'Cannot delete a category holding {n} product(s) — move or delete them first.',
+    payAtLeastOne: 'Enable at least one payment method before saving.',
+    payPlaceholder: 'Bank name/IBAN are still placeholders — customers will not see bank transfer until you replace them.',
+    note: 'Reviewer note (optional)',
+    noteHint: 'Stored with the approval decision in regulated_approvals',
+    st_inactive: 'Inactive',
     featured: 'Featured',
     bestseller: 'Best seller',
     newArrival: 'New arrival',
@@ -423,6 +446,13 @@ export default {
     shipExpress: 'Express shipping fee (SAR)',
     freeOver: 'Free shipping over (SAR)',
     vat: 'VAT %',
+    vatIncl: 'Prices include VAT',
+    contactsTitle: 'Contact details (footer & WhatsApp)',
+    cPhone: 'Phone',
+    cEmail: 'Email',
+    cAddress: 'Address',
+    cHours: 'Working hours',
+    contactsUnset: 'Contact details are still defaults — update them before launch.',
     siteNameAr: 'Store name (Arabic)',
     siteNameEn: 'Store name (English)',
     role: 'Role',
@@ -447,5 +477,18 @@ export default {
     title: 'Page Not Found',
     sub: 'The link you requested is unavailable or has moved.',
     back: 'Back to Home',
+  },
+
+  resetpw: {
+    title: 'New Password',
+    sub: 'Choose a new password for your account, then save.',
+    password: 'New password',
+    save: 'Save password',
+    saved: 'Password updated ✓',
+  },
+
+  setup: {
+    title: 'Project setup incomplete',
+    sub: 'A production build requires Supabase keys in .env (VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY). For local development only, add VITE_ALLOW_DEMO=true to allow demo mode.',
   },
 } as Dictionary

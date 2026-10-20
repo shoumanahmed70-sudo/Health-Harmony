@@ -24,10 +24,8 @@ export default function Account() {
     if (user) void api.listAddresses().then(setAddresses)
   }, [user?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (!user) {
-    nav('/login', { replace: true })
-    return null
-  }
+  // the route is guarded by <RequireUser> — while the session restores, render nothing
+  if (!user) return null
 
   const wishItems = products.filter((p) => wishlist.includes(p.slug))
   const logout = async () => {
@@ -51,6 +49,10 @@ export default function Account() {
   }
 
   const saveAddr = async () => {
+    if (!/^(\+9665\d{8}|05\d{8})$/.test(draft.phone.replace(/[\s-]/g, ''))) {
+      notify(t('err.reqPhone'))
+      return
+    }
     setSaving(true)
     const payload = { ...draft, id: editing?.id }
     const r = await api.saveAddress(payload as never)
@@ -154,9 +156,23 @@ export default function Account() {
                       <div>
                         <strong>{a.label || a.city} {a.isDefault && <span className="badge badge-rose">{t('account.isDefault')}</span>}</strong>
                         <span className="muted small" dir="ltr">{a.fullName} · {a.phone}</span>
-                        <span className="muted small">{a.city} — {a.district} — {a.street} {a.building}</span>
+                        <span className="muted small">{[a.city, a.district, a.street, a.building].filter(Boolean).join(' — ')}</span>
                       </div>
                       <div className="addr-ops">
+                        <button className="btn btn-ghost btn-sm" onClick={() => {
+                          setEditing({ id: a.id })
+                          setDraft({
+                            label: a.label ?? '',
+                            fullName: a.fullName,
+                            phone: a.phone,
+                            city: a.city,
+                            district: a.district,
+                            street: a.street,
+                            building: a.building ?? '',
+                            isDefault: a.isDefault ?? false,
+                          })
+                          window.scrollTo({ top: 240, behavior: 'smooth' })
+                        }}>{t('account.edit')}</button>
                         {!a.isDefault && <button className="btn btn-ghost btn-sm" onClick={async () => { await api.setDefaultAddress(a.id); setAddresses(await api.listAddresses()) }}>{t('account.makeDefault')}</button>}
                         <button className="btn btn-danger btn-sm" onClick={async () => { await api.deleteAddress(a.id); setAddresses(await api.listAddresses()) }}>{t('account.delete')}</button>
                       </div>

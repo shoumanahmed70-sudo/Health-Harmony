@@ -14,7 +14,9 @@ export default function AuthPage() {
   const loc = useLocation() as { state?: { from?: string } }
   const [sp] = useSearchParams()
   const mode = (sp.get('mode') as Mode) ?? 'login'
-  const nextTo = sp.get('next') ?? loc.state?.from ?? '/'
+  // internal-only redirect: 'admin' shortcut, absolute paths allowed, external links dropped
+  const rawNext = sp.get('next') ?? loc.state?.from ?? '/'
+  const nextTo = rawNext === 'admin' ? '/admin' : rawNext.startsWith('/') && !rawNext.startsWith('//') ? rawNext : '/'
 
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
@@ -99,7 +101,7 @@ export default function AuthPage() {
             )}
             <div className="field">
               <label>{isRegister ? t('auth.email') : t('auth.identifier')}</label>
-              <input className="input" type={isRegister ? 'email' : 'text'} value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete={isRegister ? 'email' : 'tel'} dir="ltr" placeholder={isLogin ? t('auth.identifierHint') : undefined} />
+              <input className="input" type={isRegister ? 'email' : 'text'} value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete={isRegister ? 'email' : 'username'} dir="ltr" placeholder={isLogin ? t('auth.identifierHint') : undefined} />
             </div>
             {isRegister && (
               <div className="field">

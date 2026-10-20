@@ -108,8 +108,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const reloadCatalog = useCallback(async () => {
+    const [ps, cs, st] = await Promise.all([api.listProducts({ publicOnly: true }), api.listCategories(), api.getSettings()])
     try {
-      const [ps, cs, st] = await Promise.all([api.listProducts({ publicOnly: true }), api.listCategories(), api.getSettings()])
       setProducts(ps)
       setCategories(cs)
       if (st) setSettings(st)
@@ -118,6 +118,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false)
     }
+    // re-clamp saved cart lines against actual stock once products are known
+    setCart((prev) =>
+      prev
+        .map((c) => {
+          const p = ps.find((x) => x.slug === c.slug)
+          return { ...c, qty: Math.min(c.qty, Math.max(1, p?.stock ?? 0)) }
+        })
+        .filter((c) => (ps.find((x) => x.slug === c.slug)?.stock ?? 0) > 0),
+    )
   }, [])
 
   const reloadOrders = useCallback(async () => {
@@ -142,23 +151,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const productBySlug = useCallback((slug: string) => products.find((p) => p.slug === slug), [products])
 
-  /* cart ops */
+  /* cart ops — quantities never exceed stock (clamped at add/update time and
+     re-clamped whenever the catalog loads) */
   const addToCart = useCallback(
     (slug: string, qty = 1) => {
       setCart((prev) => {
+        const stock = Math.max(1, products.find((p) => p.slug === slug)?.stock ?? 1)
         const existing = prev.find((c) => c.slug === slug)
-        if (existing) return prev.map((c) => (c.slug === slug ? { ...c, qty: c.qty + qty } : c))
-        return [...prev, { slug, qty }]
+        const want = Math.min((existing?.qty ?? 0) + qty, stock)
+        if (existing) return prev.map((c) => (c.slug === slug ? { ...c, qty: want } : c))
+        return [...prev, { slug, qty: want }]
       })
     },
-    [setCart],
+    [setCart, products],
   )
 
   const updateCartQty = useCallback(
     (slug: string, qty: number) => {
-      setCart((prev) => (qty <= 0 ? prev.filter((c) => c.slug !== slug) : prev.map((c) => (c.slug === slug ? { ...c, qty } : c))))
+      const stock = Math.max(1, products.find((p) => p.slug === slug)?.stock ?? 1)
+      const clamped = Math.min(qty, stock)
+      setCart((prev) => (clamped <= 0 ? prev.filter((c) => c.slug !== slug) : prev.map((c) => (c.slug === slug ? { ...c, qty: clamped } : c))))
     },
-    [setCart],
+    [setCart, products],
   )
 
   const removeFromCart = useCallback((slug: string) => setCart((prev) => prev.filter((c) => c.slug !== slug)), [setCart])

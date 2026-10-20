@@ -1,7 +1,8 @@
 import { useEffect } from 'react'
 import { BrowserRouter, Route, Routes, useLocation } from 'react-router-dom'
-import { I18nProvider } from './i18n'
+import { I18nProvider, useI18n } from './i18n'
 import { AppProvider } from './state/app'
+import { PROD_DEMO_BLOCKED } from './data/api'
 import Header from './components/Header'
 import Footer from './components/Footer'
 import { BG_LEFT, BG_RIGHT } from './data/bg'
@@ -15,6 +16,7 @@ import OrderConfirmation from './pages/OrderConfirmation'
 import Invoice from './pages/Invoice'
 import Account from './pages/Account'
 import AuthPage from './pages/Auth'
+import ResetPassword from './pages/ResetPassword'
 import Admin from './pages/Admin'
 import Contact from './pages/Contact'
 import { About, Faq, NotFound, PolicyPage } from './pages/Static'
@@ -27,7 +29,25 @@ function ScrollTop() {
   return null
 }
 
+/** Production guard: a PROD build without Supabase keys would serve an empty
+ *  demo store to real customers — show a clear setup screen instead. */
+function SetupError() {
+  const { t } = useI18n()
+  return (
+    <main className="page">
+      <div className="wrap empty-pane">
+        <div className="empty-emoji">⚙️</div>
+        <div className="empty-title">{t('setup.title')}</div>
+        <div className="empty-sub">{t('setup.sub')}</div>
+      </div>
+    </main>
+  )
+}
+
 function Shell() {
+  if (PROD_DEMO_BLOCKED) {
+    return <SetupError />
+  }
   return (
     <>
       <div className="bg-art" aria-hidden="true">
@@ -55,6 +75,7 @@ function Shell() {
           }
         />
         <Route path="/login" element={<AuthPage />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route
           path="/admin"
           element={

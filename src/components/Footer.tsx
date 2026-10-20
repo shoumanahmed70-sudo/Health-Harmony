@@ -10,7 +10,8 @@ import { Mail, Phone, Pin, Clock } from './Icons'
 
 export default function Footer() {
   const { t, locale } = useI18n()
-  const { categories } = useApp()
+  const { categories, settings } = useApp()
+  const c = settings.contacts
   const l = locale as 'ar' | 'en' | 'tl'
   const [email, setEmail] = useState('')
   const [note, setNote] = useState<string | null>(null)
@@ -21,9 +22,13 @@ export default function Footer() {
       setNote(t('err.reqEmail'))
       return
     }
-    await api.subscribeNewsletter(email)
-    setNote(t('home.newsOk'))
-    setEmail('')
+    const r = await api.subscribeNewsletter(email)
+    if (r.ok) {
+      setNote(t('home.newsOk'))
+      setEmail('')
+    } else {
+      setNote(t('home.newsErr'))
+    }
   }
 
   return (
@@ -34,10 +39,10 @@ export default function Footer() {
           <p className="f-about">{t('footer.about')}</p>
           <p className="tagline">Wellness · Balance · Vitality</p>
           <ul className="f-contact">
-            <li><Pin size={15} /> {t('footer.address')}</li>
-            <li><Mail size={15} /> {t('footer.emailV')}</li>
-            <li><Phone size={15} /> {t('footer.phoneV')}</li>
-            <li><Clock size={15} /> {t('footer.hours')}</li>
+            <li><Pin size={15} /> {c.address}</li>
+            <li><Mail size={15} /> <a dir="ltr" href={`mailto:${c.email}`}>{c.email}</a></li>
+            <li><Phone size={15} /> <a dir="ltr" href={`tel:${c.phone}`}>{c.phone}</a></li>
+            <li><Clock size={15} /> {c.hours}</li>
           </ul>
         </div>
 
@@ -73,8 +78,7 @@ export default function Footer() {
             />
             <button className="btn btn-primary btn-sm" type="submit">{t('home.newsBtn')}</button>
           </form>
-          {note && <p className={`f-note ${note === t('home.newsOk') ? 'ok' : 'err'}`}>{note}</p>}
-          <div className="f-lang">
+          {note && <p className={`f-note ${note === t('home.newsOk') ? 'ok' : 'err'}`}>{note}</p>}          <div className="f-lang">
             <h4>{t('header.langLabel')}</h4>
             <LanguageSelect current={locale} currentInline onPick={() => {}} />
           </div>
@@ -88,7 +92,7 @@ export default function Footer() {
       </div>
       <a
         className="wa-float"
-        href={waLink('0550000000', 'مرحبًا، أرغب في الاستفسار عن منتجاتكم 💚')}
+        href={waLink(settings.contacts.phone, t('wa.hello'))}
         target="_blank"
         rel="noreferrer"
         title="WhatsApp"

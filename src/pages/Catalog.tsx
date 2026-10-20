@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useI18n } from '../i18n'
 import { useApp } from '../state/app'
@@ -11,32 +11,40 @@ const CAT_EXP: Record<string, string> = {
   health: 'health',
 }
 
+/**
+ * /shop, /shop/:segment, /shop/category/:slug
+ * The URL is the single source of truth for every filter:
+ * q, cat, min, max, stock, sale, tag, sort — header search, offers links,
+ * bestseller/new links all work while already inside /shop.
+ */
 export default function Catalog() {
   const routeParams = useParams<{ params?: string; slug?: string }>()
   const [sp, setSp] = useSearchParams()
   const { t, locale } = useI18n()
   const { products, categories, loading } = useApp()
 
-  const [q, setQ] = useState(sp.get('q') ?? '')
-  const [cat, setCat] = useState<string>(sp.get('cat') ?? '')
-  const [min, setMin] = useState<number | ''>(sp.get('min') ? Number(sp.get('min')) : '')
-  const [max, setMax] = useState<number | ''>(sp.get('max') ? Number(sp.get('max')) : '')
-  const [inStockOnly, setInStockOnly] = useState(sp.get('stock') === '1')
-  const [onSaleOnly, setOnSaleOnly] = useState(sp.get('sale') === '1')
-  const [tag, setTag] = useState(sp.get('tag') ?? '')
-  const [sort, setSort] = useState(sp.get('sort') ?? 'featured')
-
   // segment pages: /shop, /shop/beauty|wellness|health, /shop/category/:slug
-  const segment = routeParams.params ?? (routeParams.slug ? 'category/' + routeParams.slug : '')
+  const segment = routeParams.params ?? (routeParams.slug ? 'category/' +routeParams.slug : '')
   const catSlug = segment.startsWith('category/') ? segment.slice('category/'.length) : ''
 
-  useEffect(() => {
-    if (segment === 'beauty') setCat('')
-    else if (segment === 'wellness' || segment === 'health') setCat('')
-    else if (catSlug) setCat(catSlug)
-    else setCat(sp.get('cat') ?? '')
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [segment, catSlug])
+  // URL-backed filter state
+  const q = sp.get('q') ?? ''
+  const cat = catSlug || sp.get('cat') || ''
+  const min = sp.get('min') ?? ''
+  const max = sp.get('max') ?? ''
+  const inStockOnly = sp.get('stock') === '1'
+  const onSaleOnly = sp.get('sale') === '1'
+  const tag = sp.get('tag') ?? ''
+  const sort = sp.get('sort') ?? 'featured'
+
+  const upd = (patch: Record<string, string | null>) => {
+    const nsp = new URLSearchParams(sp)
+    for (const [k, v] of Object.entries(patch)) {
+      if (!v) nsp.delete(k)
+      else nsp.set(k, v)
+    }
+    setSp(nsp, { replace: true })
+  }
 
   const list = useMemo(() => {
     let out: Product[] = products
@@ -51,16 +59,15 @@ export default function Catalog() {
       const n = q.trim().toLowerCase()
       out = out.filter(
         (p) =>
-          ['ar', 'en', 'tl'].some((lng) => p.label[lng as 'ar' | 'en' | 'tl'].toLowerCase().includes(n)) ||
+          ['ar', 'en', 'tl'].some((lng) => (p.label?.[lng as 'ar' | 'en' | 'tl'] ?? '').toLowerCase().includes(n)) ||
           p.sku.toLowerCase().includes(n) ||
           p.brand.toLowerCase().includes(n),
       )
     }
-    if (min !== '') out = out.filter((p) => p.price >= (min as number))
-    if (max !== '') out = out.filter((p) => p.price <= (max as number))
+    if (min !== '') out = out.filter((p) => p.price >= Number(min))
+    if (max !== '') out = out.filter((p) => p.price <= Number(max))
     if (inStockOnly) out = out.filter((p) => p.stock > 0)
-    if (onSaleOnly) out = out.filter((p) => p.comparePrice && p.comparePrice > p.price)
-    if (tag === 'sale') out = out.filter((p) => p.comparePrice && p.comparePrice > p.price)
+    if (onSaleOnly || tag === 'sale') out = out.filter((p) => p.comparePrice && p.comparePrice > p.price)
     if (tag && tag !== 'sale') out = out.filter((p) => p.badges.includes(tag as Product['badges'][number]))
 
     const sorted = [...out]
@@ -83,11 +90,6 @@ export default function Catalog() {
     return sorted
   }, [products, categories, catSlug, cat, q, min, max, inStockOnly, onSaleOnly, tag, sort, segment])
 
-  const titleKey = segment === 'beauty' ? 'page.beautyTitle' : segment === 'wellness' ? 'page.wellnessTitle' : segment === 'health' ? 'page.healthTitle' : segment === 'category' || catSlug ? (catSlug && catSlug === 'hormone' ? '' : 'shop.title') : 'shop.title'
-  const subKey = segment === 'beauty' ? 'page.beautySub' : segment === 'wellness' ? 'page.wellnessSub' : segment === 'health' ? 'page.healthSub' : 'shop.noResultsHint'
-  void titleKey
-  void subKey
-
   const theCat = categories.find((c) => c.slug === catSlug)
   const heading =
     theCat ? theCat.label[locale as 'ar' | 'en' | 'tl']
@@ -95,7 +97,7 @@ export default function Catalog() {
       : segment === 'wellness' ? t('page.wellnessTitle')
       : segment === 'health' ? t('page.healthTitle')
       : q ? `${t('page.offersTitle')} · ${q}` // search shows query context
-      : onSaleOnly ? t('page.offersTitle')
+      : onSaleOnly || tag === 'sale' ? t('page.offersTitle')
       : t('shop.title')
 
   const subheading =
@@ -103,7 +105,7 @@ export default function Catalog() {
       : segment === 'beauty' ? t('page.beautySub')
       : segment === 'wellness' ? t('page.wellnessSub')
       : segment === 'health' ? t('page.healthSub')
-      : onSaleOnly ? t('page.offersSub')
+      : onSaleOnly || tag === 'sale' ? t('page.offersSub')
       : t('shop.results')
 
   if (loading) {
@@ -121,7 +123,7 @@ export default function Catalog() {
 
             <div className="filter-block">
               <label>{t('shop.category')}</label>
-              <select className="input" value={cat} onChange={(e) => { setCat(e.target.value); const nsp = new URLSearchParams(sp); if (e.target.value) nsp.set('cat', e.target.value); else nsp.delete('cat'); setSp(nsp) }}>
+              <select className="input" value={cat} onChange={(e) => upd({ cat: e.target.value })}>
                 <option value="">{t('shop.allCats')}</option>
                 {categories.map((c) => (
                   <option key={c.id} value={c.slug}>{c.label[locale as 'ar' | 'en' | 'tl']}</option>
@@ -132,19 +134,19 @@ export default function Catalog() {
             <div className="filter-block">
               <label>{t('shop.price')}</label>
               <div className="two-num">
-                <input className="input" type="number" placeholder={t('shop.min')} value={min} onChange={(e) => setMin(e.target.value === '' ? '' : Number(e.target.value))} />
-                <input className="input" type="number" placeholder={t('shop.max')} value={max} onChange={(e) => setMax(e.target.value === '' ? '' : Number(e.target.value))} />
+                <input className="input" type="number" placeholder={t('shop.min')} value={min} onChange={(e) => upd({ min: e.target.value })} />
+                <input className="input" type="number" placeholder={t('shop.max')} value={max} onChange={(e) => upd({ max: e.target.value })} />
               </div>
             </div>
 
             <div className="filter-block form-check">
-              <label><input type="checkbox" checked={inStockOnly} onChange={(e) => setInStockOnly(e.target.checked)} /> {t('shop.inStockOnly')}</label>
-              <label><input type="checkbox" checked={onSaleOnly} onChange={(e) => setOnSaleOnly(e.target.checked)} /> {t('shop.onSaleOnly')}</label>
+              <label><input type="checkbox" checked={inStockOnly} onChange={(e) => upd({ stock: e.target.checked ? '1' : null })} /> {t('shop.inStockOnly')}</label>
+              <label><input type="checkbox" checked={onSaleOnly} onChange={(e) => upd({ sale: e.target.checked ? '1' : null })} /> {t('shop.onSaleOnly')}</label>
             </div>
 
             <div className="filter-block">
               <label>{t('shop.sort')}</label>
-              <select className="input" value={sort} onChange={(e) => setSort(e.target.value)}>
+              <select className="input" value={sort} onChange={(e) => upd({ sort: e.target.value })}>
                 <option value="featured">{t('shop.sortFeatured')}</option>
                 <option value="price_asc">{t('shop.sortPriceAsc')}</option>
                 <option value="price_desc">{t('shop.sortPriceDesc')}</option>
@@ -153,7 +155,7 @@ export default function Catalog() {
               </select>
             </div>
 
-            <button className="btn btn-outline btn-sm btn-block" onClick={() => { setQ(''); setCat(''); setMin(''); setMax(''); setInStockOnly(false); setOnSaleOnly(false); setTag(''); setSp(new URLSearchParams()) }}>
+            <button className="btn btn-outline btn-sm btn-block" onClick={() => setSp({}, { replace: true })}>
               {t('shop.reset')}
             </button>
           </aside>
@@ -161,24 +163,23 @@ export default function Catalog() {
           <section>
             <div className="results-bar">
               <span>{list.length} {t('shop.results')}</span>
-              {q && <button className="chip-x" onClick={() => { setQ(''); const nsp = new URLSearchParams(sp); nsp.delete('q'); setSp(nsp) }}>✕ {q}</button>}
+              {q && <button className="chip-x" onClick={() => upd({ q: null })}>✕ {q}</button>}
             </div>
             {list.length === 0 ? (
               <div className="empty-pane">
                 <div className="empty-emoji">🌻</div>
                 <div className="empty-title">{t('shop.noResults')}</div>
                 <div className="empty-sub">{t('shop.noResultsHint')}</div>
+                <Link to="/shop" className="btn btn-outline">{t('cart.continue')}</Link>
               </div>
             ) : (
-              <div className="grid">{list.map((p) => <ProductCard key={p.slug} p={p} />)}</div>
+              <div className="grid">
+                {list.map((p) => <ProductCard key={p.slug} p={p} />)}
+              </div>
             )}
           </section>
         </div>
       </div>
     </main>
   )
-}
-
-export function CatalogLink() {
-  return <Link to="/shop" />
 }

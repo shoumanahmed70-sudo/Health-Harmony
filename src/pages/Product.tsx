@@ -12,7 +12,7 @@ import type { Product, Review } from '../data/types'
 export default function ProductPage() {
   const { slug = '' } = useParams()
   const { t, locale, money, formatDate } = useI18n()
-  const { products, addToCart, toggleWishlist, inWishlist, notify, user } = useApp()
+  const { products, categories, loading, addToCart, toggleWishlist, inWishlist, notify, user } = useApp()
   const nav = useNavigate()
 
   const [active, setActive] = useState(0)
@@ -34,6 +34,10 @@ export default function ProductPage() {
     if (p?.age18 && !ageConfirmed()) setAgeModal(true)
   }, [p?.age18]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  if (loading && !p) {
+    return <div className="loading-block"><div className="spinner" /></div>
+  }
+
   if (!p) {
     return (
       <main className="page">
@@ -47,6 +51,7 @@ export default function ProductPage() {
   }
 
   const l = locale as 'ar' | 'en' | 'tl'
+  const categoryName = categories.find((c) => c.slug === p.categorySlug)?.label[l] ?? p.categorySlug
   const img = p.images[active] ?? p.images[0] ?? artFor(p.categorySlug, p.slug)
   const price = money(p.price)
   const was = p.comparePrice && p.comparePrice > p.price ? money(p.comparePrice) : undefined
@@ -100,7 +105,7 @@ export default function ProductPage() {
         <nav className="crumbs" aria-label="breadcrumb">
           <Link to="/">{t('nav.home')}</Link>
           <span aria-hidden="true">/</span>
-          <Link to={`/shop/category/${p.categorySlug}`}>{p.categorySlug}</Link>
+          <Link to={`/shop/category/${p.categorySlug}`}>{categoryName}</Link>
           <span aria-hidden="true">/</span>
           <b>{productTitle(p, l)}</b>
         </nav>
@@ -110,7 +115,7 @@ export default function ProductPage() {
           <div className="prod-gallery">
             <div className="prod-main-img card"><img src={img} alt={productTitle(p, l)} /></div>
             <div className="prod-thumbs">
-              {(p.images.length ? p.images : [artFor(p.categorySlug, p.slug + i(), 720)]).map((src, i) => (
+              {(p.images.length ? p.images : [artFor(p.categorySlug, p.slug + '_b', 720)]).map((src, i) => (
                 <button key={i} className={`thumb${i === active ? ' on' : ''}`} onClick={() => setActive(i)}>
                   <img src={src} alt={`${productTitle(p, l)} ${i + 1}`} loading="lazy" />
                 </button>
@@ -156,7 +161,9 @@ export default function ProductPage() {
                 className="btn btn-primary btn-lg"
                 disabled={p.stock <= 0}
                 onClick={() => {
-                  addToCart(p.slug, qty)
+                  const clamped = Math.min(qty, Math.max(1, p.stock))
+                  if (clamped !== qty) setQty(clamped)
+                  addToCart(p.slug, clamped)
                   notify(t('product.added'))
                 }}
               >
@@ -228,6 +235,7 @@ export default function ProductPage() {
                 <div className="review-head">
                   <b>{r.name}</b>
                   <Stars avg={r.rating} small />
+                  {r.seed && <em className="badge badge-cream">{t('product.seedReview')}</em>}
                   <span className="muted">{formatDate(r.createdAt)}</span>
                 </div>
                 <p>{r.comment}</p>
@@ -237,21 +245,31 @@ export default function ProductPage() {
 
           <form className="review-form" onSubmit={submitReview}>
             <h3>{t('product.write')}</h3>
-            {!user && <p className="muted small">{t('product.loginToWrite')}</p>}
-            <div className="rate-inputs">
-              {[1, 2, 3, 4, 5].map((n) => (
-                <button type="button" key={n} className={`star-btn${n <= ratingInput ? ' on' : ''}`} onClick={() => setRatingInput(n)} aria-label={`${n}`}>★</button>
-              ))}
-            </div>
-            <textarea
-              className="input"
-              value={comment}
-              onChange={(e) => setComment(e.target.value)}
-              placeholder={t('pages.formMsg')}
-              rows={3}
-              required
-            />
-            <button className="btn btn-primary" disabled={sendingReview}>{sendingReview ? '…' : t('pages.send')}</button>
+            {!user ? (
+              <p className="muted small">
+                {t('product.loginToWrite')}{' '}
+                <Link to={`/login?next=${encodeURIComponent('/product/' + p.slug)}`} className="link-muted">
+                  {t('auth.login')}
+                </Link>
+              </p>
+            ) : (
+              <>
+                <div className="rate-inputs">
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <button type="button" key={n} className={`star-btn${n <= ratingInput ? ' on' : ''}`} onClick={() => setRatingInput(n)} aria-label={`${n}`}>★</button>
+                  ))}
+                </div>
+                <textarea
+                  className="input"
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
+                  placeholder={t('pages.formMsg')}
+                  rows={3}
+                  required
+                />
+                <button className="btn btn-primary" disabled={sendingReview}>{sendingReview ? '…' : t('pages.send')}</button>
+              </>
+            )}
           </form>
         </section>
 
@@ -264,10 +282,6 @@ export default function ProductPage() {
       </div>
     </main>
   )
-}
-
-function i() {
-  return Math.random().toString(36).slice(2, 6)
 }
 
 function MiniCard({ p }: { p: Product }) {

@@ -9,10 +9,17 @@ import { Arrow, Check, Globe, Shield, Sparkle, Truck } from '../components/Icons
 import { productTitle } from '../data/util'
 import type { Review } from '../data/types'
 
+/** Photos matched to the settings-defined promo banners, in sort order. */
+const PROMO_PHOTOS = ['/photos/banner-care.jpg', '/photos/banner-offers.jpg']
+
 
 export default function Home() {
   const { t, locale } = useI18n()
-  const { products, categories, notify } = useApp()
+  const { products, categories, settings, notify } = useApp()
+  const banners = useMemo(
+    () => (settings.banners ?? []).filter((b) => b.active).sort((a, b) => a.sort - b.sort),
+    [settings.banners],
+  )
   const [reviews, setReviews] = useState<Review[]>([])
   const [newsEmail, setNewsEmail] = useState('')
   const [newsNote, setNewsNote] = useState<string | null>(null)
@@ -52,10 +59,14 @@ export default function Home() {
       setNewsNote(t('home.newsInvalid'))
       return
     }
-    await api.subscribeNewsletter(newsEmail)
-    setNewsNote(t('home.newsOk'))
-    setNewsEmail('')
-    notify(t('home.newsOk'))
+    const r = await api.subscribeNewsletter(newsEmail)
+    if (r.ok) {
+      setNewsNote(t('home.newsOk'))
+      setNewsEmail('')
+      notify(t('home.newsOk'))
+    } else {
+      setNewsNote(t('home.newsErr'))
+    }
   }
 
   const l = locale as 'ar' | 'en' | 'tl'
@@ -97,7 +108,7 @@ export default function Home() {
         <SectionHead title={t('home.catsTitle')} sub={t('home.catsSub')} />
         <div className="coll-grid">
           {[
-            { img: '/photos/tile-care.jpg', to: '/shop/category/care-health', label: (categories[0]?.label[l]) ?? '' },
+            { img: '/photos/tile-care.jpg', to: '/shop/category/care-health', label: (categories[0]?.label[l] ?? '') || '' },
             { img: '/photos/tile-offers.jpg', to: '/shop?sale=1', label: t('nav.offers') },
             { img: '/photos/tile-best.jpg', to: '/shop?tag=bestseller', label: t('home.bestTitle') },
             { img: '/photos/tile-new.jpg', to: '/shop?tag=new', label: t('home.newTitle') },
@@ -110,27 +121,23 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ───────── photo promo banners ───────── */}
-      <section className="section wrap">
-        <div className="promo-duo">
-          <Link to="/shop/category/care-health" className="promo-banner has-photo">
-            <img src="/photos/banner-care.jpg" alt="" loading="lazy" />
-            <div className="promo-copy">
-              <b>{t('page.beautyTitle')}</b>
-              <span>{t('hero.chip2')}</span>
-              <em className="promo-cta">{t('hero.cta')}</em>
-            </div>
-          </Link>
-          <Link to="/shop?sale=1" className="promo-banner has-photo">
-            <img src="/photos/banner-offers.jpg" alt="" loading="lazy" />
-            <div className="promo-copy">
-              <b>{t('nav.offers')}</b>
-              <span>{t('hero.chip1')}</span>
-              <em className="promo-cta">{t('hero.cta')}</em>
-            </div>
-          </Link>
-        </div>
-      </section>
+      {/* ───────── photo promo banners (driven by settings.banners) ───────── */}
+      {banners.length > 0 && (
+        <section className="section wrap">
+          <div className="promo-duo">
+            {banners.map((b, i) => (
+              <Link to={b.ctaLink || '/shop'} key={b.id} className="promo-banner has-photo">
+                <img src={PROMO_PHOTOS[i % PROMO_PHOTOS.length]} alt="" loading="lazy" />
+                <div className="promo-copy">
+                  <b>{b.title[l]}</b>
+                  <span>{b.sub[l]}</span>
+                  <em className="promo-cta">{t('hero.cta')}</em>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* ───────── product rows ───────── */}
 

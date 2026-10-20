@@ -1,9 +1,9 @@
 -- ═══════════════════════════════════════════════════════════════
 -- Health Harmony — initial schema + Row Level Security
 -- Run in Supabase SQL editor (or `supabase db push`).
+-- Idempotent: safe to run again on an existing database.
 -- ═══════════════════════════════════════════════════════════════
 
-create extension if not exists "gen_random_uuid_sup_aux"; -- noop-safe
 create extension if not exists pgcrypto;
 
 -- ── profiles ────────────────────────────────────────────────────
@@ -14,6 +14,9 @@ create table if not exists public.profiles (
   role text not null default 'customer' check (role in ('customer','admin')),
   created_at timestamptz not null default now()
 );
+
+-- denormalised email (joined-list view, customer search, and phone→email login lookup)
+alter table public.profiles add column if not exists email text not null default '';
 
 create or replace function public.is_admin()
 returns boolean
@@ -36,8 +39,11 @@ security definer
 set search_path = public
 as $$
 begin
-  insert into public.profiles (id, full_name)
-  values (new.id, coalesce(new.raw_user_meta_data->>'full_name', split_part(new.email,'@',1)))
+  insert into public.profiles (id, full_name, phone, email)
+  values (new.id,
+          coalesce(new.raw_user_meta_data->>'full_name', split_part(new.email,'@',1)),
+          coalesce(nullif(new.raw_user_meta_data->>'phone',''), null),
+          coalesce(new.email, ''))
   on conflict (id) do nothing;
   return new;
 end;
@@ -47,6 +53,13 @@ drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
+
+-- backfill emails for existing profiles
+update public.profiles p
+set email = coalesce(u.email, '')
+from auth.users u
+where p.id = u.id
+  and p.email = '';
 
 -- ── categories ─────────────────────────────────────────────────
 create table if not exists public.categories (
@@ -193,8 +206,13 @@ create policy p_profiles_upd on public.profiles
 create or replace function public.guard_role_change()
 returns trigger language plpgsql security definer set search_path = public as $$
 begin
-  if new.role = 'admin' and not coalesce(public.is_admin(), false) then
-    raise exception 'Only an admin can grant the admin role';
+  -- SQL editor / service role (no session => auth.uid() is null) may change roles freely.
+  -- Admins may change roles. Signed-in non-admins may never change a role
+  -- (but can still update their own profile fields normally).
+  if auth.uid() is not null and not coalesce(public.is_admin(), false) then
+    if new.role is distinct from old.role then
+      raise exception 'Only an admin can change roles';
+    end if;
   end if;
   return new;
 end; $$;
@@ -224,8 +242,12 @@ create policy p_rev_read on public.reviews for select using (true);
 drop policy if exists p_rev_insert on public.reviews;
 create policy p_rev_insert on public.reviews for insert
   with check (auth.uid() is not null and user_id = auth.uid());
+drop policy if exists p_rev_admin_upd on public.reviews;
+create policy p_rev_admin_upd on public.reviews for update
+  using (coalesce(public.is_admin(), false));
 drop policy if exists p_rev_admin on public.reviews;
-create policy p_rev_admin on public.reviews for update or delete
+drop policy if exists p_rev_admin_del on public.reviews;
+create policy p_rev_admin_del on public.reviews for delete
   using (coalesce(public.is_admin(), false));
 
 -- addresses: owner-only
@@ -233,14 +255,13 @@ drop policy if exists p_addr_all on public.addresses;
 create policy p_addr_all on public.addresses for all
   using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
--- orders: owner read; write only via the orders-create edge function (service role bypasses RLS);
--- admins may read/update (but existing RLS update policy lets admins also update existing records)
+-- orders: owner read; admins read/update. Inserts happen ONLY through the
+-- orders-create edge function (service role bypasses RLS) so clients can never
+-- forge prices; this is why no insert policy exists here.
 drop policy if exists p_order_owner_read on public.orders;
 create policy p_order_owner_read on public.orders for select
   using (auth.uid() = user_id or coalesce(public.is_admin(), false));
 drop policy if exists p_order_owner_insert on public.orders;
-create policy p_order_owner_insert on public.orders for insert
-  with check (auth.uid() is not null and user_id = auth.uid());
 drop policy if exists p_order_admin_upd on public.orders;
 create policy p_order_admin_upd on public.orders for update
   using (coalesce(public.is_admin(), false));
@@ -279,9 +300,19 @@ insert into storage.buckets (id, name, public)
 values ('product-images', 'product-images', true)
 on conflict (id) do nothing;
 
-drop policy if exists p_store_admin_write on storage.objects;
-create policy p_store_admin_write on storage.objects for insert, update, delete
+-- product-images bucket: admins manage (three separate policies suppress warnings);
+-- public read via the bucket's public flag
+drop policy if exists p_store_admin_ins on storage.objects;
+create policy p_store_admin_ins on storage.objects for insert
+  with check (bucket_id = 'product-images' and coalesce(public.is_admin(), false));
+drop policy if exists p_store_admin_upd on storage.objects;
+create policy p_store_admin_upd on storage.objects for update
+  using (bucket_id = 'product-images' and coalesce(public.is_admin(), false))
+  with check (bucket_id = 'product-images' and coalesce(public.is_admin(), false));
+drop policy if exists p_store_admin_del on storage.objects;
+create policy p_store_admin_del on storage.objects for delete
   using (bucket_id = 'product-images' and coalesce(public.is_admin(), false));
+drop policy if exists p_store_admin_write on storage.objects;
 drop policy if exists p_store_public_read on storage.objects;
 create policy p_store_public_read on storage.objects for select
   using (bucket_id = 'product-images');

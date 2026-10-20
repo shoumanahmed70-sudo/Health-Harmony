@@ -23,6 +23,14 @@ const anon = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
 
 export const isSupabaseConfigured = Boolean(url && anon)
 
+/**
+ * A production build without Supabase credentials would silently show real
+ * customers an empty localStorage demo store. Block that unless the developer
+ * opts in explicitly with VITE_ALLOW_DEMO=true.
+ */
+export const PROD_DEMO_BLOCKED =
+  import.meta.env.PROD && !isSupabaseConfigured && import.meta.env.VITE_ALLOW_DEMO !== 'true'
+
 let _sb: SupabaseClient | null = null
 export function sb(): SupabaseClient {
   if (!_sb && url && anon) {
@@ -55,6 +63,7 @@ export function publicProduct(p: Product): boolean {
 function withRatings(products: Product[], reviews: Review[]): Product[] {
   const bySlug = new Map<string, Review[]>()
   for (const r of reviews) {
+    if (r.seed) continue // starter reviews never count toward real averages
     const arr = bySlug.get(r.productSlug) ?? []
     arr.push(r)
     bySlug.set(r.productSlug, arr)
@@ -73,6 +82,7 @@ function withRatings(products: Product[], reviews: Review[]): Product[] {
    ═════════════════════════════════════════════════════════════ */
 
 interface DemoDB {
+  v?: number
   categories: Category[]
   products: Product[]
   reviews: Review[]
@@ -85,8 +95,10 @@ interface DemoDB {
   newsletter: { email: string; createdAt: string }[]
 }
 
-const DB_KEY = 'hh_demo_db_v1'
+const DB_KEY = 'hh_demo_db_v2' // bump by hand when the seed content changes (fresh state)
 const SESSION_KEY = 'hh_demo_session'
+/** Schema/seed version of the DEMO data — bump deliberately to re-merge the seed catalog. */
+const DEMO_DB_VERSION = 2
 
 function freshDB(): DemoDB {
   return {
@@ -127,26 +139,53 @@ function db(): DemoDB {
   return _db
 }
 
-/** Align a stored demo DB with the current CATEGORIES set (e.g. sections consolidated later). */
-function migrate(db: DemoDB): void {
+/** Align a stored demo DB with the current seed: prune removed seed products,
+ *  merge newly added ones, and refresh seed-content fields (DemoDB.v flag keeps
+ *  admin adjustments like price/stock for admin-created (uuid) products safe). */
+function migrate(x: DemoDB): void {
+  let dirty = false
   const want = clone(CATEGORIES)
-  const same = db.categories && db.categories.length === want.length && want.every((w) => db.categories.some((c) => c.slug === w.slug))
+  const same = x.categories && x.categories.length === want.length && want.every((w) => x.categories.some((c) => c.slug === w.slug))
   // prune seed-style products that no longer exist in the seed (admin-created
-  // products keep their own ids and are never removed from the demo DB)
+  // products have their own (uuid) ids and are never removed from the demo DB)
   const knownIds = new Set(PRODUCTS.map((p) => p.id))
-  const pruned = db.products.filter((p) => !p.id.startsWith('p_') || knownIds.has(p.id))
-  if (pruned.length !== db.products.length) {
-    db.products = pruned
-    saveDB()
+  const pruned = x.products.filter((p) => p.id.startsWith('p_') ? knownIds.has(p.id) : true)
+  if (pruned.length !== x.products.length) {
+    x.products = pruned
+    dirty = true
+  }
+  // merge: add seed products missing from the stored db, and refresh content
+  // fields of seed items while keeping runtime state (price/stock/flags)
+  for (const sp of PRODUCTS) {
+    const cur = x.products.find((p) => p.id === sp.id)
+    if (!cur) {
+      x.products.push(clone(sp))
+      dirty = true
+      continue
+    }
+    if (!cur.id.startsWith('p_')) continue // admin-created — untouched
+    const snapshot = JSON.stringify(cur)
+    const runtime = {
+      price: cur.price, comparePrice: cur.comparePrice, stock: cur.stock,
+      active: cur.active, regulated: cur.regulated, regStatus: cur.regStatus,
+      age18: cur.age18, sold: cur.sold, rating: cur.rating, createdAt: cur.createdAt,
+    }
+    Object.assign(cur, clone(sp), runtime)
+    if (JSON.stringify(cur) !== snapshot) dirty = true
   }
   if (!same) {
-    db.categories = want
+    x.categories = want
     const validSlugs = new Set(want.map((c) => c.slug))
-    for (const p of db.products) {
+    for (const p of x.products) {
       if (!validSlugs.has(p.categorySlug)) p.categorySlug = want[0]?.slug ?? 'care-health'
     }
-    saveDB()
+    dirty = true
   }
+  if (x.v !== DEMO_DB_VERSION) {
+    x.v = DEMO_DB_VERSION
+    dirty = true
+  }
+  if (dirty) saveDB()
 }
 
 function saveDB() {
@@ -180,7 +219,11 @@ export const api = {
   async listCategories(): Promise<Category[]> {
     if (isSupabaseConfigured) {
       const { data, error } = await sb().from('categories').select('*').order('sort')
-      if (error || !data) return clone(CATEGORIES)
+      if (error || !data) {
+        // never fall back to the demo catalog inside Supabase mode
+        console.error('listCategories failed', error)
+        return []
+      }
       return data.map((r: Record<string, unknown>) => ({
         id: r.id,
         slug: r.slug,
@@ -205,7 +248,11 @@ export const api = {
       const { data, error } = await q
       if (error || !data) return []
       products = data.map(mapProductFromRow)
-      const { data: rv } = await sb().from('reviews').select('*').order('created_at', { ascending: false })
+      // fetch ratings only for the products we are actually serving
+      const served = products.map((p) => p.slug)
+      const { data: rv } = served.length
+        ? await sb().from('reviews').select('*').in('product_slug', served).order('created_at', { ascending: false })
+        : { data: [] }
       reviews = (rv ?? []).map(mapReviewFromRow)
     } else {
       products = clone(db().products)
@@ -221,7 +268,7 @@ export const api = {
       const needle = opts.q.trim().toLowerCase()
       out = out.filter(
         (p) =>
-          ['ar', 'en', 'tl'].some((l) => p.label[l as 'ar' | 'en' | 'tl'].toLowerCase().includes(needle)) ||
+          ['ar', 'en', 'tl'].some((l) => (p.label?.[l as 'ar' | 'en' | 'tl'] ?? '').toLowerCase().includes(needle)) ||
           p.sku.toLowerCase().includes(needle) ||
           p.brand.toLowerCase().includes(needle) ||
           p.categorySlug.includes(needle),
@@ -274,12 +321,20 @@ export const api = {
   /* ---------- settings / promos ---------- */
 
   async getSettings(): Promise<Settings> {
+    const defaults = clone(DEFAULT_SETTINGS)
+    // missing/legacy rows are filled from the defaults (contacts, vatInclusive…)
+    const merge = (s: Partial<Settings> | null | undefined): Settings => ({
+      ...defaults,
+      ...(s ?? {}),
+      payments: { ...defaults.payments, ...(s?.payments ?? {}) },
+      contacts: { ...defaults.contacts, ...(s?.contacts ?? {}) },
+    })
     if (isSupabaseConfigured) {
       const { data } = await sb().from('site_settings').select('value').eq('key', 'storefront').maybeSingle()
-      if (data && data.value) return data.value as Settings
-      return clone(DEFAULT_SETTINGS)
+      if (data && data.value) return merge(data.value as Partial<Settings>)
+      return defaults
     }
-    return clone(db().settings)
+    return merge(db().settings)
   },
 
   async checkPromo(code: string): Promise<Promo | null> {
@@ -327,11 +382,19 @@ export const api = {
 
   async signIn({ email, password }: { email: string; password: string }): Promise<AuthResult> {
     if (isSupabaseConfigured) {
-      const { data, error } = await sb().auth.signInWithPassword({ email: email.trim().toLowerCase(), password })
+      let login = email.trim().toLowerCase()
+      const id = login.replace(/[\s-]/g, '')
+      // Saudi mobile sign-in: resolve phone → the email bound to its profile
+      if (/^(\+9665\d{8}|05\d{8})$/.test(id)) {
+        const phoneArg = id.startsWith('0') ? '+966' + id.slice(1) : id
+        const { data: em } = await sb().rpc('find_email_by_phone', { p_phone: phoneArg })
+        if (!em) return { ok: false, err: 'bad' }
+        login = String(em)
+      }
+      const { error } = await sb().auth.signInWithPassword({ email: login, password })
       if (error) {
         return error.message.includes('Invalid login') ? { ok: false, err: 'bad' } : { ok: false, err: 'generic' }
       }
-      void data
       return { ok: true }
     }
     const u = db().users.find((x) => {
@@ -355,7 +418,7 @@ export const api = {
       const { error } = await sb().auth.signUp({
         email: email.trim().toLowerCase(),
         password,
-        options: { data: { full_name: name } },
+        options: { data: { full_name: name, phone: phone?.replace(/[\s-]/g, '') ?? '' } },
       })
       if (error) {
         if (error.message.includes('already registered')) return { ok: false, err: 'in_use' }
@@ -402,11 +465,32 @@ export const api = {
 
   async resetPassword(email: string): Promise<EmailResult> {
     if (isSupabaseConfigured) {
-      const { error } = await sb().auth.resetPasswordForEmail(email, { redirectTo: window.location.origin + '/#/reset' })
+      const { error } = await sb().auth.resetPasswordForEmail(email, {
+        redirectTo: window.location.origin + '/reset-password',
+      })
       return error ? { ok: false, err: 'mail' } : { ok: true }
     }
     // demo: nothing to send — the UI explains that a real email requires configuration
     return { ok: true }
+  },
+
+  async changePassword(newPassword: string): Promise<EmailResult> {
+    if (isSupabaseConfigured) {
+      const { error } = await sb().auth.updateUser({ password: newPassword })
+      return error ? { ok: false, err: 'generic' } : { ok: true }
+    }
+    // demo: change the stored plaintext (demo-only) password for the local session user
+    try {
+      const id = window.localStorage.getItem(SESSION_KEY)
+      const u = id ? db().users.find((x) => x.id === id) : null
+      if (u) {
+        u.pw = newPassword
+        saveDB()
+      }
+      return { ok: true }
+    } catch {
+      return { ok: false, err: 'generic' }
+    }
   },
 
   /* ---------- addresses ---------- */
@@ -428,13 +512,21 @@ export const api = {
       const user = await api.getUser()
       if (!user) return { ok: false, err: 'generic' }
       const row = mapAddressToRow(a, user.id)
-      const { error } = a.id
-        ? await sb().from('addresses').update(row).eq('id', a.id)
-        : await sb().from('addresses').insert(row)
-      if (!error && a.isDefault) {
-        await sb().from('addresses').update({ is_default: false }).eq('user_id', user.id).neq('id', a.id ?? '')
+      if (a.id) {
+        const { error } = await sb().from('addresses').update(row).eq('id', a.id)
+        if (error) return { ok: false, err: 'generic' }
+        if (a.isDefault) {
+          await sb().from('addresses').update({ is_default: false }).eq('user_id', user.id).neq('id', a.id)
+        }
+        return { ok: true }
       }
-      return error ? { ok: false, err: 'generic' } : { ok: true }
+      const { data, error } = await sb().from('addresses').insert(row).select('id').single()
+      if (error) return { ok: false, err: 'generic' }
+      if (a.isDefault) {
+        const newId = (data as { id: string }).id
+        await sb().from('addresses').update({ is_default: false }).eq('user_id', user.id).neq('id', newId)
+      }
+      return { ok: true }
     }
     const userId = window.localStorage.getItem(SESSION_KEY) ?? undefined
     if (!userId) return { ok: false, err: 'generic' }
@@ -498,7 +590,12 @@ export const api = {
     const settings = await api.getSettings()
     const shippingBase = draft.shippingMethod === 'express' ? settings.shipExpress : settings.shipStandard
     const shipping = subtotal - discount >= settings.freeOver ? 0 : shippingBase
-    const total = Math.max(0, subtotal - discount + shipping)
+    // prices are VAT-inclusive by default; when the admin switches to
+    // VAT-exclusive pricing the tax is added on top of the order total
+    const tax = settings.vatInclusive === false && settings.vat > 0
+      ? Math.round(((subtotal - discount) * settings.vat) / 100 * 100) / 100
+      : 0
+    const total = Math.max(0, subtotal - discount + shipping + tax)
     const number = 'HH' + Date.now().toString(36).toUpperCase().slice(-5) + Math.floor(Math.random() * 1296).toString(36).toUpperCase().padStart(2, '0')
 
     const order: Order = {
@@ -531,10 +628,30 @@ export const api = {
           },
         })
         if (error || !data?.order) {
-          console.warn('orders-create edge function unavailable; order not saved remotely.', error)
-          return { err: 'edge' }
+          // surface the server-issued error code when available (FunctionsHttpError.context)
+          let code = ''
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const ctx = (error as { context?: { json?: () => Promise<{ code?: string }> } }).context
+            if (ctx && typeof ctx.json === 'function') {
+              code = (await ctx.json())?.code ?? ''
+            }
+          } catch {
+            /* response body unavailable */
+          }
+          console.warn('orders-create edge function rejected the order.', code || error)
+          return { err: code || 'edge' }
         }
-        return data.order as Order
+        const mapped = mapOrderFromRow(data.order)
+        try {
+          // guests (no account) cannot re-read the row via RLS — remember it for
+          // /order/:number and /invoice/:number in this browser session
+          window.sessionStorage.setItem(`hh_order_${mapped.number}`, JSON.stringify(mapped))
+          window.sessionStorage.setItem(`hh_order_phone_${mapped.number}`, draft.contact.phone.replace(/[\s-]/g, ''))
+        } catch {
+          /* storage unavailable */
+        }
+        return mapped
       } catch (e) {
         console.warn(e)
         return { err: 'edge' }
@@ -565,10 +682,22 @@ export const api = {
 
   async getOrder(number: string): Promise<Order | null> {
     if (isSupabaseConfigured) {
+      // signed-in owner/admin: direct read via RLS
       const { data } = await sb().from('orders').select('*').eq('number', number).maybeSingle()
-      return data ? mapOrderFromRow(data) : null
+      if (data) return mapOrderFromRow(data)
+      // guest fallback: orders-get verifies the checkout phone (cached at checkout)
+      try {
+        const phone = window.sessionStorage.getItem(`hh_order_phone_${number}`) ?? ''
+        if (!phone) return null
+        const { data: g, error: gerr } = await sb().functions.invoke('orders-get', { body: { number, phone } })
+        if (gerr || !g?.order) return null
+        return mapOrderFromRow(g.order)
+      } catch {
+        return null
+      }
     }
-    return clone(db().orders.find((o) => o.number === number)) ?? null
+    const o = db().orders.find((x) => x.number === number)
+    return o ? clone(o) : null
   },
 
   /* ---------- misc ---------- */
@@ -584,8 +713,11 @@ export const api = {
   async subscribeNewsletter(email: string): Promise<EmailResult> {
     if (isSupabaseConfigured) {
       const { error } = await sb().from('newsletter').insert({ email: email.trim().toLowerCase() })
+      // an already-subscribed email is success for the subscriber
+      if (error && error.code === '23505') return { ok: true }
       return error ? { ok: false, err: 'generic' } : { ok: true }
     }
+    // demo: duplicates are simply ignored (idempotent subscribe)
     if (!db().newsletter.some((n) => n.email === email)) db().newsletter.push({ email, createdAt: new Date().toISOString() })
     saveDB()
     return { ok: true }
@@ -756,7 +888,18 @@ export const api = {
     async savePromos(list: Promo[]): Promise<EmailResult> {
       if (isSupabaseConfigured) {
         const { error } = await sb().from('promos').upsert(list)
-        return error ? { ok: false, err: 'generic' } : { ok: true }
+        if (error) return { ok: false, err: 'generic' }
+        // deletions + code renames: remove any code the admin dropped from the list
+        const { data: existing } = await sb().from('promos').select('code')
+        const keepCodes = new Set(list.map((p) => p.code.trim().toUpperCase()))
+        const stale = (existing ?? [])
+          .map((r: Record<string, unknown>) => String(r.code))
+          .filter((c: string) => !keepCodes.has(c))
+        if (stale.length) {
+          const { error: derr } = await sb().from('promos').delete().in('code', stale)
+          if (derr) return { ok: false, err: 'generic' }
+        }
+        return { ok: true }
       }
       db().promos = list
       saveDB()
@@ -772,12 +915,12 @@ export const api = {
     },
 
     /** Regulated-product approval decision. Only administrators may call this. */
-    async setRegStatus(productId: string, status: 'approved' | 'pending' | 'off'): Promise<EmailResult> {
+    async setRegStatus(productId: string, status: 'approved' | 'pending' | 'off', reviewerNote?: string): Promise<EmailResult> {
       if (isSupabaseConfigured) {
         const user = await api.getUser()
         const { error: e1 } = await sb().from('products').update({ reg_status: status }).eq('id', productId)
         const { error: e2 } = await sb().from('regulated_approvals').upsert(
-          { product_id: productId, status, reviewed_by: user?.id ?? null, reviewed_at: new Date().toISOString() },
+          { product_id: productId, status, reviewer_note: reviewerNote?.trim() || null, reviewed_by: user?.id ?? null, reviewed_at: new Date().toISOString() },
           { onConflict: 'product_id' },
         )
         return e1 || e2 ? { ok: false, err: 'generic' } : { ok: true }
@@ -792,7 +935,9 @@ export const api = {
 
     async uploadImage(file: File): Promise<string> {
       if (isSupabaseConfigured) {
-        const path = `products/${Date.now()}-${file.name.replace(/\s+/g, '-')}`
+        // ASCII-safe, collision-resistant object path
+        const base = file.name.replace(/[^a-zA-Z0-9._-]/g, '-').replace(/-+/g, '-').slice(-40) || 'image'
+        const path = `products/${Date.now()}-${uid().slice(0, 8)}-${base}`
         const { error } = await sb().storage.from('product-images').upload(path, file, { upsert: true })
         if (error) throw new Error(error.message)
         return sb().storage.from('product-images').getPublicUrl(path).data.publicUrl
