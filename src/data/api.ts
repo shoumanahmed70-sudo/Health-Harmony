@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { SUPABASE_ANON_KEY, SUPABASE_URL } from '../config'
 import { CATEGORIES, DEFAULT_SETTINGS, PRODUCTS, PROMOS, REVIEWS } from './catalog'
 import type {
   Address,
@@ -18,8 +19,8 @@ import type {
    Configuration
    ───────────────────────────────────────────────────────────── */
 
-const url = import.meta.env.VITE_SUPABASE_URL as string | undefined
-const anon = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
+const url = SUPABASE_URL
+const anon = SUPABASE_ANON_KEY
 
 export const isSupabaseConfigured = Boolean(url && anon)
 
@@ -228,9 +229,12 @@ export const api = {
   async health(): Promise<string | null> {
     if (!isSupabaseConfigured) return null
     try {
+      // Use a normal GET rather than HEAD: some PostgREST/proxy combinations
+      // report a missing table as 204 on HEAD, which would hide a broken setup
+      // behind an empty storefront instead of the database-error screen.
       const [products, categories] = await Promise.all([
-        sb().from('products').select('slug', { count: 'exact', head: true }).eq('active', true).limit(1),
-        sb().from('categories').select('slug', { count: 'exact', head: true }).eq('active', true).limit(1),
+        sb().from('products').select('slug').eq('active', true).limit(1),
+        sb().from('categories').select('slug').eq('active', true).limit(1),
       ])
       return products.error?.message ?? categories.error?.message ?? null
     } catch (e) {

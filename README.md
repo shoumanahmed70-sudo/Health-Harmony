@@ -19,12 +19,14 @@ fitness and wellness products, with legally compliant health products controls.
 | Mode | When | Behavior |
 |---|---|---|
 | **Demo** (development only) | No Supabase credentials in `.env` while running `npm run dev` | Full site works against a seeded local catalog; orders, accounts, reviews, addresses and admin editing persist in `localStorage` of that browser (`hh_demo_db_v2`). |
-| **Supabase** | `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY` present | Reads/writes the real database through RLS; orders are created **only** by the `orders-create` edge function which re-verifies all prices server-side. |
+| **Supabase** | `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY` present, or the public production fallback in `src/config.ts` | Reads/writes the real database through RLS; orders are created **only** by the `orders-create` edge function which re-verifies all prices server-side. |
 
-> **Production guard:** a PROD build **without** Supabase keys shows a clear setup-error
-> screen. Demo mode is never used by a production bundle — there is no opt-in flag.
-> If Supabase is configured but unreachable, the store shows a database-error screen
-> and retries; it never falls back to local data or records a fake order.
+> **Production guard:** host env vars override the public fallback in
+> `src/config.ts`. If both are absent, a PROD build shows a clear setup-error
+> screen. Demo mode is never used by a production bundle — there is no opt-in
+> flag. If Supabase is configured but unreachable, the store shows a
+> database-error screen and retries; it never falls back to local data or records
+> a fake order.
 
 The service-role key is **never** exposed to the frontend; it is used only inside
 `supabase/functions/orders-create`, `orders-get` and `promos-check`.
